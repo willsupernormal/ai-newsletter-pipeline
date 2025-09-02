@@ -1,0 +1,197 @@
+name: Daily AI Newsletter Scraping
+
+on:
+  schedule:
+    # Run daily at 7:00 AM UTC (11:00 PM PST / 12:00 AM PDT)
+    - cron: '0 7 * * *'
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no database writes)'
+        required: false
+        default: 'false'
+        type: boolean
+      log_level:
+        description: 'Log level'
+        required: false
+        default: 'INFO'
+        type: choice
+        options:
+        - DEBUG
+        - INFO
+        - WARNING
+        - ERROR
+
+jobs:
+  scrape-content:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run content scraping pipeline
+      env:
+        # Database Configuration
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        
+        # AI Configuration
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        OPENAI_MODEL: "gpt-4-turbo-preview"
+        
+        # Twitter Configuration
+        TWITTER_SERVICE: "apify"
+        APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+        
+        # Gmail Configuration
+        GMAIL_EMAIL: ${{ secrets.GMAIL_EMAIL }}
+        GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        
+        # Pipeline Configuration
+        LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+        MIN_RELEVANCE_SCORE: "50"
+        MAX_ARTICLES_PER_SOURCE: "50"
+        REQUEST_DELAY_SECONDS: "1.0"
+        
+        # Performance Settings
+        MAX_CONCURRENT_REQUESTS: "5"  # Conservative for GitHub Actions
+        BATCH_SIZE: "50"
+        
+      run: |
+        if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+          python main.py --dry-run --log-level ${{ github.event.inputs.log_level || 'INFO' }}
+        else
+          python main.py --log-level ${{ github.event.inputs.log_level || 'INFO' }}
+        fi
+    
+    - name: Clean up old content (weekly)
+      if: github.event.schedule == '0 7 * * 1'  # Run only on Mondays
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+      run: |
+        python main.py --cleanup --log-level ${{ github.event.inputs.log_level || 'INFO' }}
+    
+    - name: Upload logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: pipeline-logs-${{ github.run_number }}
+        path: |
+          *.log
+          logs/
+        retention-days: 7
+
+  notify-on-failure:
+    needs: scrape-content
+    runs-on: ubuntu-latest
+    if: failure() && github.event_name == 'schedule'
+    
+    steps:
+    - name: Send failure notification
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const title = 'AI Newsletter Pipeline Failed';
+          const body = `
+          The daily AI newsletter scraping pipeline failed.
+          
+          **Run Details:**
+          - Run ID: ${{ github.run_id }}
+          - Run Number: ${{ github.run_number }}
+          - Triggered: ${{ github.event_name }}
+          - Time: ${{ github.event.head_commit.timestamp }}
+          
+          **Actions:**
+          1. Check the [workflow run logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          2. Review any uploaded log artifacts
+          3. Consider running the pipeline manually to debug
+          
+          **Quick Debug Commands:**
+          \`\`\`bash
+          # Test individual components
+          python -m scrapers.rss_scraper
+          python -m scrapers.twitter_scraper  
+          python -m scrapers.gmail_scraper
+          
+          # Run with debug logging
+          python main.py --dry-run --log-level DEBUG
+          \`\`\`
+          `;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['bug', 'pipeline-failure', 'automation']
+          });
+
+  weekly-stats:
+    needs: scrape-content
+    runs-on: ubuntu-latest
+    if: success() && github.event.schedule == '0 7 * * 1'  # Run only on Mondays after successful scrape
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Generate weekly stats
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        LOG_LEVEL: "INFO"
+      run: |
+        python -c "
+        import asyncio
+        from config.settings import Settings
+        from database.weekly_manager import WeeklyManager
+        
+        async def generate_stats():
+            settings = Settings()
+            manager = WeeklyManager(settings)
+            summary = await manager.get_current_week_summary()
+            comparison = await manager.get_weekly_comparison()
+            
+            print('Weekly Statistics Generated:')
+            print(f'Articles collected: {summary[\"stats\"].get(\"total_articles\", 0)}')
+            print(f'Average relevance: {summary[\"stats\"].get(\"avg_relevance\", 0):.1f}')
+            print(f'Selected articles: {summary[\"selected_articles_count\"]}')
+        
+        asyncio.run(generate_stats())
+        "
+
+# Security best practices
+env:
+  PYTHONUNBUFFERED: 1
+  PYTHONDONTWRITEBYTECODE: 1
