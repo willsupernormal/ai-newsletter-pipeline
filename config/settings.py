@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = Field(default="gpt-4-turbo-preview", description="OpenAI model to use")
     
     # Twitter Configuration
-    TWITTER_SERVICE: str = Field(default="apify", description="Twitter service: apify or rapidapi")
+    TWITTER_SERVICE: str = Field(default="rapidapi", description="Twitter service: apify or rapidapi")
     APIFY_API_TOKEN: Optional[str] = Field(default=None, description="Apify API token")
     APIFY_ACTOR_ID: str = Field(default="apify/twitter-scraper", description="Apify actor ID")
     RAPIDAPI_KEY: Optional[str] = Field(default=None, description="RapidAPI key")
@@ -50,8 +50,8 @@ class Settings(BaseSettings):
     
     # Twitter Monitoring
     TWITTER_ACCOUNTS: str = Field(
-        default="AndrewYNg,karpathy,ylecun,sama,OpenAI,GoogleAI",
-        description="Comma-separated Twitter accounts to monitor"
+        default="216939636,33836629,48008938,1605,4398626122,33838201",
+        description="Comma-separated Twitter user IDs to monitor"
     )
     
     # Newsletter Processing

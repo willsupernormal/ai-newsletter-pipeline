@@ -13,6 +13,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from config.settings import Settings
+from database.supabase_simple import SimpleSupabaseClient
 
 
 class RSScraper:
@@ -22,9 +23,21 @@ class RSScraper:
         self.settings = settings
         self.logger = logging.getLogger(__name__)
         self.session: Optional[aiohttp.ClientSession] = None
+        self.db_client = SimpleSupabaseClient(settings)
         
         # Configure feedparser
         feedparser.USER_AGENT = "AI Newsletter Pipeline/1.0"
+    
+    async def get_rss_sources(self) -> List[Dict[str, Any]]:
+        """Load active RSS sources from content_sources table"""
+        try:
+            response = self.db_client.client.table('content_sources').select('*').eq('type', 'rss').eq('active', True).execute()
+            sources = response.data
+            self.logger.info(f"Loaded {len(sources)} active RSS sources from database")
+            return sources
+        except Exception as e:
+            self.logger.error(f"Failed to load RSS sources from database: {e}")
+            return []
     
     async def __aenter__(self):
         """Async context manager entry"""
@@ -249,19 +262,31 @@ class RSScraper:
             return await self._scrape_all_feeds_impl()
     
     async def _scrape_all_feeds_impl(self) -> List[Dict[str, Any]]:
-        """Internal implementation of scrape_all_feeds"""
-        feeds = self.settings.rss_feeds
-        self.logger.info(f"Starting RSS scraping for {len(feeds)} feeds")
+        """Internal implementation of scrape_all_feeds using dynamic sources"""
+        # Load RSS sources from database
+        sources = await self.get_rss_sources()
+        
+        if not sources:
+            self.logger.warning("No active RSS sources found in database")
+            return []
+        
+        self.logger.info(f"Starting RSS scraping for {len(sources)} feeds from database")
         
         # Create semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(self.settings.MAX_CONCURRENT_REQUESTS)
         
-        async def scrape_with_semaphore(feed_config):
+        async def scrape_with_semaphore(source):
             async with semaphore:
+                # Convert database source to feed config format
+                feed_config = {
+                    'name': source['name'],
+                    'url': source['identifier'],
+                    'source_id': source['id']
+                }
                 return await self.scrape_single_feed(feed_config)
         
         # Run all feeds concurrently
-        tasks = [scrape_with_semaphore(feed) for feed in feeds]
+        tasks = [scrape_with_semaphore(source) for source in sources]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Collect all articles
@@ -269,7 +294,8 @@ class RSScraper:
         successful_feeds = 0
         
         for i, result in enumerate(results):
-            feed_name = feeds[i]['name']
+            source = sources[i]
+            feed_name = source['name']
             
             if isinstance(result, Exception):
                 self.logger.error(f"Feed {feed_name} failed: {result}")
@@ -279,8 +305,19 @@ class RSScraper:
                 successful_feeds += 1
                 self.logger.info(f"Feed {feed_name}: {len(articles)} articles")
         
-        self.logger.info(f"RSS scraping completed: {successful_feeds}/{len(feeds)} feeds successful, "
+        self.logger.info(f"RSS scraping completed: {successful_feeds}/{len(sources)} feeds successful, "
                         f"{len(all_articles)} total articles")
+        
+        # Update last_processed timestamp for successful sources
+        for i, result in enumerate(results):
+            if not isinstance(result, Exception):
+                source = sources[i]
+                try:
+                    self.db_client.client.table('content_sources').update({
+                        'last_processed': datetime.now().isoformat()
+                    }).eq('id', source['id']).execute()
+                except Exception as update_error:
+                    self.logger.warning(f"Failed to update last_processed for source {source['name']}: {update_error}")
         
         return all_articles
 

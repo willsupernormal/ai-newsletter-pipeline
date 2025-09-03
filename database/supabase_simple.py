@@ -48,6 +48,18 @@ class SimpleSupabaseClient:
             self.logger.error(f"Query execution failed: {e}")
             raise
     
+    async def get_recent_articles(self, days: int = 7) -> List[Dict[str, Any]]:
+        """Get articles from the last N days"""
+        cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+        
+        response = self.client.table('articles').select('*').gte('scraped_at', cutoff_date).execute()
+        return response.data
+    
+    async def get_article_by_url(self, url: str) -> Optional[Dict[str, Any]]:
+        """Get article by URL"""
+        response = self.client.table('articles').select('*').eq('url', url).execute()
+        return response.data[0] if response.data else None
+    
     async def insert_article(self, article_data: Dict[str, Any]) -> str:
         """Insert a single article and return its ID"""
         try:
