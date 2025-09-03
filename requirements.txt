@@ -4,7 +4,7 @@ asyncpg==0.29.0
 python-dotenv==1.0.0
 
 # Database
-supabase==2.1.3
+supabase==2.18.1
 
 # Web scraping and parsing
 feedparser==6.0.10
@@ -24,7 +24,7 @@ sentence-transformers==2.2.2
 scikit-learn==1.3.2
 
 # Twitter scraping services
-apify-client==1.4.2
+apify-client==1.12.2
 # rapidapi-python==1.0.8  # Uncomment if using RapidAPI
 
 # Text processing
