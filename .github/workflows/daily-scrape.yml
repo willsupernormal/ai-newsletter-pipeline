@@ -2,8 +2,8 @@ name: Daily AI Newsletter Scraping
 
 on:
   schedule:
-    # Run daily at 7:00 AM UTC (11:00 PM PST / 12:00 AM PDT)
-    - cron: '0 7 * * *'
+    # Run daily at 7:00 AM Singapore Time (11:00 PM UTC previous day)
+    - cron: '0 23 * * *'
   
   # Allow manual triggering
   workflow_dispatch:
@@ -80,7 +80,7 @@ jobs:
         fi
     
     - name: Clean up old content (weekly)
-      if: github.event.schedule == '0 7 * * 1'  # Run only on Mondays
+      if: github.event.schedule == '0 23 * * 0'  # Run only on Sundays (Monday 7am Singapore)
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -150,7 +150,7 @@ jobs:
   weekly-stats:
     needs: scrape-content
     runs-on: ubuntu-latest
-    if: success() && github.event.schedule == '0 7 * * 1'  # Run only on Mondays after successful scrape
+    if: success() && github.event.schedule == '0 23 * * 0'  # Run only on Sundays (Monday 7am Singapore) after successful scrape
     
     steps:
     - name: Checkout code
