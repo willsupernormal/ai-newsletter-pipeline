@@ -1,30 +1,44 @@
 # AI Newsletter Pipeline
 
-Automated content collection and weekly curation system for business AI newsletters. Built with async Python, Supabase, and Claude MCP integration.
+Automated content collection and AI-powered daily digest system for business AI newsletters. Built with async Python, Supabase, and Claude MCP integration.
 
 ## Features
 
 - **Daily Automated Scraping**: RSS feeds, Twitter accounts, and Gmail newsletters
-- **AI-Powered Content Scoring**: OpenAI-based relevance evaluation
-- **Weekly Content Organization**: Boss only sees current week's content
-- **Claude MCP Integration**: Natural language curation workflow
-- **Duplicate Detection**: Smart deduplication across sources
+- **Multi-Stage AI Processing**: Two-stage OpenAI filtering for optimal content selection
+- **Daily Digest Generation**: AI creates comprehensive daily summaries with key insights
+- **Weekly Content Organization**: Boss sees current week's content with daily breakdowns
+- **Claude MCP Integration**: Natural language database interaction for curation
+- **Smart Duplicate Detection**: Advanced deduplication across all sources
 - **GitHub Actions Automation**: Runs daily at 7 AM UTC
 - **Source Performance Analytics**: Track which sources deliver best content
+- **Enhanced Database Schema**: Optimized for MCP queries and boss interaction
 
 ## Architecture
 
 ```
-Daily Scraping (GitHub Actions 7 AM UTC)
-├── RSS Feeds → Business AI sources
-├── Twitter Accounts → Key influencers  
-├── Gmail Newsletter Tag → Parse "newsletter" tagged emails
-└── Weekly Content Organization → Boss sees current week only
+Daily Pipeline (GitHub Actions 7 AM UTC)
+├── Multi-Source Scraping
+│   ├── RSS Feeds → Business AI sources
+│   ├── Twitter Accounts → Key influencers  
+│   └── Gmail Newsletter Tag → Parse "newsletter" tagged emails
+├── Content Processing
+│   ├── Deduplication → Remove duplicates across sources
+│   ├── Content Cleaning → Extract and format text
+│   └── Multi-Stage AI Filtering
+│       ├── Stage 1: Relevance filtering (top 15 from all articles)
+│       └── Stage 2: Final selection (top 5 with summaries)
+└── Daily Digest Creation
+    ├── AI-Generated Summary → Key themes and insights
+    ├── Selected Articles → Top 5 with enhanced descriptions
+    └── Database Storage → daily_digests table with article references
 
-Boss Curation (Weekend via Claude MCP)
-├── "Show me this week's top vendor lock-in stories"
-├── "What are the best data strategy articles from this week?"
-└── "Mark articles 1,3,5 as newsletter-ready"
+Boss Interaction (Anytime via Claude MCP)
+├── Daily Digest Review → "Show me today's digest"
+├── Weekly Overview → "What are this week's top themes?"
+├── Targeted Queries → "Find vendor lock-in articles from this week"
+├── Article Selection → "Mark articles 1,3,5 as newsletter-ready"
+└── Performance Analysis → "Which sources performed best this week?"
 ```
 
 ## Quick Start
@@ -102,14 +116,22 @@ Add to Claude Desktop MCP settings:
 ### Local Testing
 
 ```bash
-# Test run without storing data
-python main.py --dry-run
+# Enhanced AI digest pipeline (recommended)
+python run_ai_digest_pipeline.py
 
-# Full pipeline execution
-python main.py
+# Show recent daily digests
+python run_ai_digest_pipeline.py show
 
-# Clean old content
-python main.py --cleanup
+# Legacy weekly pipeline
+python main.py --dry-run  # Test run without storing
+python main.py           # Full pipeline execution
+python main.py --cleanup # Clean old content
+
+# RSS-only pipeline for testing
+python run_rss_pipeline.py
+
+# Simple pipeline without AI processing
+python run_simple_pipeline.py
 
 # Test individual components
 python -m scrapers.rss_scraper
@@ -117,25 +139,35 @@ python -m scrapers.twitter_scraper
 python -m scrapers.gmail_scraper
 ```
 
-### Boss Curation Workflow
+### Boss Interaction Workflow
 
 Once Claude MCP is configured, use natural language queries:
 
 ```
+Daily Digest Review:
+"Show me today's daily digest"
+"What were the key insights from yesterday's digest?"
+"Show me the last 3 days of digests"
+
 Weekly Overview:
-"Show me this week's summary stats and top 10 articles"
+"Show me this week's summary stats and top articles"
+"What are the trending themes this week?"
+"Which sources performed best this week?"
 
 Theme-Based Searching:
-"What are the best vendor lock-in stories from this week?"
-"Show me articles about data strategy or infrastructure"
+"Find all vendor lock-in articles from this week"
+"Show me data strategy articles with high relevance scores"
+"What AI governance stories do we have?"
 
 Content Selection:
-"Select articles with IDs abc123, def456, ghi789 for newsletter"
-"Make article abc123 the lead story with priority 1"
+"Mark articles with IDs abc123, def456 for newsletter"
+"Set article abc123 as priority 1 lead story"
+"Show me all articles selected for newsletter this week"
 
-Newsletter Preparation:
-"Show me all selected articles for this week's newsletter"
-"Preview the newsletter content with selected articles"
+Analytics & Performance:
+"Which content sources are delivering the best articles?"
+"Show me relevance score trends over the past month"
+"What topics are we covering most frequently?"
 ```
 
 ## Content Sources
@@ -172,19 +204,23 @@ Articles are scored 0-100 based on alignment with "Don't panic. Prepare your dat
 - Enterprise decision-making impact (15 points)
 - Recency and relevance (10 points)
 
-## Weekly Process
+## Daily Process
 
-### Automated (Daily at 7 AM UTC)
-- Scrape RSS feeds, Twitter, Gmail newsletters
-- Score content with AI for relevance
-- Organize by current week
-- Store in Supabase with weekly cycling
+### Automated Pipeline (Daily at 7 AM UTC)
+1. **Content Scraping**: Collect from RSS feeds, Twitter, Gmail newsletters
+2. **Multi-Stage AI Processing**:
+   - Stage 1: Filter to top 15 most relevant articles
+   - Stage 2: Select final 5 articles with enhanced summaries
+3. **Daily Digest Creation**: AI generates comprehensive summary with key insights
+4. **Database Storage**: Store in `daily_digests` table with article references
+5. **Weekly Organization**: Articles organized by week for easy boss access
 
-### Boss Curation (Weekend)
-1. **Monday Morning**: Check weekly stats and top articles
-2. **During Week**: Monitor specific topics as needed
-3. **Weekend Curation**: Select 3-5 best articles for newsletter
-4. **Monthly Review**: Analyze source performance and trends
+### Boss Interaction (Anytime via MCP)
+1. **Daily Review**: Check morning digest for key developments
+2. **Weekly Planning**: Review week's themes and top articles
+3. **Newsletter Curation**: Select and prioritize articles for publication
+4. **Performance Monitoring**: Track source quality and content trends
+5. **Ad-hoc Queries**: Search for specific topics or themes as needed
 
 ## File Structure
 
@@ -200,16 +236,18 @@ ai-newsletter-pipeline/
 │   ├── twitter_scraper.py # Twitter API integration
 │   └── gmail_scraper.py   # Newsletter email processing
 ├── database/
-│   ├── supabase_client.py # Database operations
-│   └── weekly_manager.py  # Week cycling logic
+│   ├── supabase_client.py    # Database operations
+│   ├── supabase_simple.py    # Simplified client for basic ops
+│   ├── digest_storage.py     # Daily digest storage and retrieval
+│   ├── weekly_manager.py     # Week cycling logic
+│   └── schema.sql           # Complete database schema with views
 ├── processors/
-│   ├── content_processor.py # Cleaning and formatting
-│   ├── deduplicator.py     # Duplicate detection
-│   └── ai_evaluator.py     # OpenAI scoring
-├── mcp/
-│   ├── mcp_queries.py      # Pre-built queries
-│   ├── curation_tools.py   # Article selection
-│   └── analytics.py        # Performance tracking
+│   ├── content_processor.py  # Cleaning and formatting
+│   ├── deduplicator.py      # Duplicate detection
+│   ├── ai_evaluator.py      # OpenAI scoring (legacy)
+│   ├── multi_stage_digest.py # Two-stage AI filtering system
+│   ├── data_aggregator.py   # Multi-source content aggregation
+│   └── theme_extractor.py   # Topic and theme analysis
 ├── utils/
 │   ├── logger.py          # Logging setup
 │   └── helpers.py         # Utility functions
