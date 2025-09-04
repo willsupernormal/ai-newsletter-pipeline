@@ -74,21 +74,9 @@ jobs:
         
       run: |
         if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-          python -c "
-          import asyncio
-          from datetime import datetime
-          from run_ai_digest_pipeline import run_ai_digest_pipeline
-          print('Running enhanced AI digest pipeline in dry-run mode')
-          asyncio.run(run_ai_digest_pipeline(datetime.now().strftime('%Y-%m-%d'), dry_run=True))
-          "
+          python -c "import asyncio; from datetime import datetime; from run_ai_digest_pipeline import run_ai_digest_pipeline; print('Running enhanced AI digest pipeline in dry-run mode'); asyncio.run(run_ai_digest_pipeline(datetime.now().strftime('%Y-%m-%d'), dry_run=True))"
         else
-          python -c "
-          import asyncio
-          from datetime import datetime
-          from run_ai_digest_pipeline import run_ai_digest_pipeline
-          print('Running enhanced AI digest pipeline')
-          asyncio.run(run_ai_digest_pipeline(datetime.now().strftime('%Y-%m-%d')))
-          "
+          python -c "import asyncio; from datetime import datetime; from run_ai_digest_pipeline import run_ai_digest_pipeline; print('Running enhanced AI digest pipeline'); asyncio.run(run_ai_digest_pipeline(datetime.now().strftime('%Y-%m-%d')))"
         fi
     
     - name: Clean up old content (weekly)
