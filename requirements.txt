@@ -1,58 +1,58 @@
 # Core dependencies
-aiohttp==3.9.1
-asyncpg==0.29.0
-python-dotenv==1.0.0
+aiohttp>=3.9.0
+asyncpg>=0.29.0
+python-dotenv>=1.0.0
 
-# Database
-supabase==2.18.1
+# Database - use compatible ranges for evolving APIs
+supabase>=2.18.0,<3.0.0
 
 # Web scraping and parsing
-feedparser==6.0.10
-beautifulsoup4==4.12.2
-lxml==4.9.3
-requests==2.31.0
-aiofiles==23.2.1
+feedparser>=6.0.0
+beautifulsoup4>=4.12.0  # HTML parsing - allow minor updates
+lxml>=4.9.0  # XML parsing - allow minor updates
+requests>=2.31.0
+aiofiles>=23.2.0
 
 # Email processing
-imapclient==3.0.1
-email-validator==2.1.0
+imapclient>=3.0.0
+email-validator>=2.1.0
 
-# AI and ML
-openai==1.3.7
-tiktoken==0.5.2
-sentence-transformers==2.2.2
-scikit-learn==1.3.2
+# AI and ML - use compatible ranges for rapidly evolving APIs
+openai>=1.3.0,<2.0.0
+tiktoken>=0.5.0
+sentence-transformers>=2.2.0
+scikit-learn>=1.3.0
 
 # Twitter scraping services
-apify-client==1.12.2
-# rapidapi-python==1.0.8  # Uncomment if using RapidAPI
+apify-client>=1.12.0
+# rapidapi-python>=1.0.0  # Uncomment if using RapidAPI
 
 # Text processing
-nltk==3.8.1
-textstat==0.7.3
-fuzzywuzzy==0.18.0
-python-levenshtein==0.23.0
+nltk>=3.8.0
+textstat>=0.7.0
+fuzzywuzzy>=0.18.0
+python-levenshtein>=0.23.0
 
 # Date and time
-python-dateutil==2.8.2
-pytz==2023.3
+python-dateutil>=2.8.0
+pytz>=2023.3
 
 # Logging and monitoring
-structlog==23.2.0
-colorama==0.4.6
+structlog>=23.2.0
+colorama>=0.4.0
 
 # Configuration and environment
 pydantic>=2.11.7,<3.0.0
-pydantic-settings==2.1.0
+pydantic-settings>=2.1.0,<3.0.0
 
 # Async utilities
-# asyncio-mqtt==0.13.0  # Not needed for this project
-aioretry==1.2.0
+# asyncio-mqtt>=0.13.0  # Not needed for this project
+aioretry>=1.2.0
 
-# Development dependencies
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-mock==3.12.0
-black==23.11.0
-flake8==6.1.0
-mypy==1.7.1
+# Development dependencies - allow minor updates for tooling
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.12.0
+black>=23.11.0
+flake8>=6.1.0
+mypy>=1.7.0
