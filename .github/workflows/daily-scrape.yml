@@ -56,8 +56,7 @@ jobs:
         OPENAI_MODEL: "gpt-4-turbo-preview"
         
         # Twitter Configuration
-        TWITTER_SERVICE: "apify"
-        APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+        RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
         
         # Gmail Configuration
         GMAIL_EMAIL: ${{ secrets.GMAIL_EMAIL }}
@@ -75,9 +74,21 @@ jobs:
         
       run: |
         if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-          python main.py --dry-run --log-level ${{ github.event.inputs.log_level || 'INFO' }}
+          python -c "
+          import asyncio
+          from datetime import datetime
+          from run_ai_digest_pipeline import run_ai_digest_pipeline
+          print('Running enhanced AI digest pipeline in dry-run mode')
+          asyncio.run(run_ai_digest_pipeline(datetime.now().strftime('%Y-%m-%d'), dry_run=True))
+          "
         else
-          python main.py --log-level ${{ github.event.inputs.log_level || 'INFO' }}
+          python -c "
+          import asyncio
+          from datetime import datetime
+          from run_ai_digest_pipeline import run_ai_digest_pipeline
+          print('Running enhanced AI digest pipeline')
+          asyncio.run(run_ai_digest_pipeline(datetime.now().strftime('%Y-%m-%d')))
+          "
         fi
     
     - name: Clean up old content (weekly)
@@ -88,7 +99,7 @@ jobs:
         SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
       run: |
-        python main.py --cleanup --log-level ${{ github.event.inputs.log_level || 'INFO' }}
+        echo "Weekly cleanup - enhanced pipeline handles data management automatically"
     
     - name: Upload logs on failure
       if: failure()
