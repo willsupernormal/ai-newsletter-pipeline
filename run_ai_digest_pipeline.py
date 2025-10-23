@@ -13,6 +13,7 @@ from config.settings import Settings
 from processors.data_aggregator import DataAggregator
 from processors.multi_stage_digest import MultiStageDigestProcessor
 from database.digest_storage import DigestStorage
+from services.slack_notifier import SlackNotifier
 from utils.logger import setup_logger
 
 async def run_ai_digest_pipeline(target_date: date = None):
@@ -33,6 +34,11 @@ async def run_ai_digest_pipeline(target_date: date = None):
         data_aggregator = DataAggregator(settings)
         digest_processor = MultiStageDigestProcessor(settings)
         digest_storage = DigestStorage(settings)
+        slack_notifier = SlackNotifier(
+            webhook_url=settings.SLACK_WEBHOOK_URL,
+            error_webhook_url=settings.SLACK_ERROR_WEBHOOK_URL,
+            enabled=settings.SLACK_ENABLED
+        )
         
         # Check if digest already exists for this date
         existing_digest = await digest_storage.get_daily_digest(target_date)
@@ -102,11 +108,52 @@ async def run_ai_digest_pipeline(target_date: date = None):
         for insight in digest_result['key_insights']:
             print(f"  • {insight}")
         
+        # Post to Slack
+        if settings.SLACK_WEBHOOK_URL and settings.SLACK_ENABLED:
+            logger.info("Posting digest to Slack...")
+            slack_success = slack_notifier.post_digest(
+                digest_date=target_date if isinstance(target_date, date) else datetime.strptime(target_date, '%Y-%m-%d').date(),
+                summary_text=digest_result['digest_text'],
+                key_insights=digest_result['key_insights'],
+                selected_articles=digest_result['selected_articles'],
+                total_processed=digest_result['total_processed'],
+                rss_count=aggregated_content.rss_count,
+                twitter_count=aggregated_content.twitter_count
+            )
+            
+            if slack_success:
+                logger.info("✅ Successfully posted digest to Slack")
+                print("\n📱 Posted to Slack: #ai-daily-digest")
+            else:
+                logger.warning("⚠️ Failed to post digest to Slack (check logs)")
+                print("\n⚠️ Slack posting failed (digest still saved to database)")
+        else:
+            logger.info("Slack posting disabled or not configured")
+            print("\n📱 Slack posting: Disabled")
+        
         return True
         
     except Exception as e:
         logger.error(f"AI digest pipeline failed: {e}", exc_info=True)
         print(f"❌ Pipeline failed: {e}")
+        
+        # Send error notification to Slack
+        try:
+            settings = Settings()
+            slack_notifier = SlackNotifier(
+                webhook_url=settings.SLACK_WEBHOOK_URL,
+                error_webhook_url=settings.SLACK_ERROR_WEBHOOK_URL,
+                enabled=settings.SLACK_ENABLED
+            )
+            
+            slack_notifier.post_error_notification(
+                error_message=f"Daily digest pipeline failed for {target_date}",
+                error_details=str(e),
+                pipeline_stage="AI Digest Pipeline"
+            )
+        except Exception as slack_error:
+            logger.error(f"Failed to send error notification to Slack: {slack_error}")
+        
         return False
 
 async def show_recent_digests(days: int = 3):

@@ -12,6 +12,7 @@ from openai import AsyncOpenAI
 
 from config.settings import Settings
 from database.supabase_simple import SimpleSupabaseClient
+from services.prompt_service import get_prompt_service
 
 class NewsletterDraftProcessor:
     """Processes weekly articles into structured newsletter drafts"""
@@ -21,6 +22,7 @@ class NewsletterDraftProcessor:
         self.logger = logging.getLogger(__name__)
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.db_client = SimpleSupabaseClient(settings)
+        self.prompt_service = get_prompt_service(settings)
     
     def get_week_start(self, target_date: date = None) -> date:
         """Get Monday of the current week"""
@@ -78,40 +80,29 @@ TAGS: {', '.join(article.get('tags', []))}
             batch_end = min(batch_start + batch_size, len(articles))
             batch_articles = article_summaries[batch_start:batch_end]
             
-            prompt = f"""
-You are scoring articles for an executive AI newsletter focused on "Don't panic. Prepare your data. Stay agnostic."
-
-SCORING CRITERIA (0-100 each):
-1. RELEVANCE: AI-specific, high business impact for tech executives
-2. TIMELINESS: Published within the week, addresses current trends
-3. EVIDENCE QUALITY: Data, citations, case studies, concrete examples
-4. INNOVATION: Operational consequences, not hype - real business implications
-
-NEWSLETTER POTENTIAL:
-- HEADLINE POTENTIAL: Suitable for 1-2 sentence executive summary
-- DEEP DIVE POTENTIAL: Rich enough for 300-400 word analysis with implications
-
-ARTICLES TO SCORE:
-{chr(10).join(batch_articles)}
-
-RESPOND WITH JSON:
-{{
-  "article_scores": [
-    {{
-      "article_index": 0,
-      "relevance_score": 85,
-      "timeliness_score": 90,
-      "evidence_quality_score": 75,
-      "innovation_score": 80,
-      "headline_potential_score": 85,
-      "deep_dive_potential_score": 90,
-      "reasoning": "Brief explanation of scores"
-    }}
-  ]
-}}
-
-Score ALL {len(batch_articles)} articles. Focus on business value for executives, not technical details.
-"""
+            # Get newsletter scoring prompt from database
+            prompt = await self.prompt_service.get_formatted_prompt(
+                'newsletter_scoring_prompt',
+                articles=chr(10).join(batch_articles)
+            )
+            
+            if not prompt:
+                self.logger.error("Newsletter scoring prompt not found in database")
+                # Add articles with default scores as fallback
+                for i in range(batch_start, batch_end):
+                    if i < len(articles):
+                        article = articles[i].copy()
+                        article.update({
+                            'relevance_score': 50,
+                            'timeliness_score': 50,
+                            'evidence_quality_score': 50,
+                            'innovation_score': 50,
+                            'headline_potential_score': 50,
+                            'deep_dive_potential_score': 50,
+                            'scoring_reasoning': 'Default scores - prompt not found'
+                        })
+                        scored_articles.append(article)
+                continue
             
             try:
                 response = await self.client.chat.completions.create(
@@ -214,60 +205,38 @@ CONTENT: {article.get('content_excerpt', '')[:500]}...
 """
             deep_dive_summaries.append(summary)
         
-        prompt = f"""
-You are creating a weekly AI newsletter for a tech executive. Select content following this structure:
-
-NEWSLETTER REQUIREMENTS:
-- Executive tone: snark-free, concise, no hype, subtle edge
-- Focus: "Don't panic. Prepare your data. Stay agnostic."
-
-HEADLINE CANDIDATES:
-{chr(10).join(headline_summaries)}
-
-DEEP DIVE CANDIDATES:
-{chr(10).join(deep_dive_summaries)}
-
-RESPOND WITH JSON:
-{{
-  "top_headlines": [
-    {{
-      "article_index": 0,
-      "title": "Clean, executive-friendly title",
-      "summary": "1-2 sentence neutral summary with business implications"
-    }}
-  ],
-  "deep_dive": {{
-    "article_index": 2,
-    "title": "Deep dive article title",
-    "expanded_content": "600-800 word comprehensive analysis that explores multiple dimensions of the topic. Include: 1) Context and background, 2) Current market dynamics, 3) Strategic implications for enterprise leaders, 4) Contrarian or alternative perspectives, 5) Connection to broader industry trends, 6) Actionable insights for decision-makers. Executive tone with analytical depth.",
-    "key_implications": ["Strategic implication for enterprise planning", "Operational consideration for implementation", "Competitive advantage or risk factor", "Timeline and resource implications"],
-    "related_perspectives": ["How this connects to broader AI/tech trends", "Alternative viewpoints or potential counterarguments", "Historical context or similar precedents"]
-  }},
-  "operators_lens": [
-    "Takeaway 1: What this means for firms like yours",
-    "Takeaway 2: Specific operational insight",
-    "Takeaway 3: Strategic consideration"
-  ],
-  "quick_hits": [
-    {{
-      "type": "funding",
-      "content": "Brief note on relevant funding/acquisition"
-    }},
-    {{
-      "type": "regulation", 
-      "content": "Brief regulatory update"
-    }}
-  ]
-}}
-
-SELECT:
-- 3-5 top headlines (diverse sources, complementary topics)
-- 1 deep dive article (rich content, strategic implications)
-- 2-3 operator takeaways (actionable insights)
-- 1-2 quick hits (optional, if relevant content exists)
-
-Ensure executive focus, no technical jargon, business implications clear.
-"""
+        # Get newsletter content selection prompt from database
+        prompt = await self.prompt_service.get_formatted_prompt(
+            'newsletter_content_selection_prompt',
+            headline_summaries=chr(10).join(headline_summaries),
+            deep_dive_summaries=chr(10).join(deep_dive_summaries)
+        )
+        
+        if not prompt:
+            self.logger.error("Newsletter content selection prompt not found in database")
+            # Return fallback selection
+            return {
+                'top_headlines': [
+                    {
+                        'article_id': article['id'],
+                        'title': article['title'],
+                        'summary': 'Manual review needed - prompt not found',
+                        'source': article['source_name'],
+                        'url': article['url']
+                    }
+                    for article in headline_candidates[:3]
+                ],
+                'deep_dive': {
+                    'article_id': deep_dive_candidates[0]['id'],
+                    'title': deep_dive_candidates[0]['title'],
+                    'expanded_content': 'Manual expansion needed - prompt not found',
+                    'key_implications': ['Manual review required'],
+                    'source': deep_dive_candidates[0]['source_name'],
+                    'url': deep_dive_candidates[0]['url']
+                } if deep_dive_candidates else None,
+                'operators_lens': ['Manual review needed - prompt not found'],
+                'quick_hits': []
+            }
         
         try:
             response = await self.client.chat.completions.create(

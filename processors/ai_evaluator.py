@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 import tiktoken
 
 from config.settings import Settings
+from services.prompt_service import get_prompt_service
 
 
 class AIEvaluator:
@@ -20,6 +21,7 @@ class AIEvaluator:
         self.settings = settings
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.logger = logging.getLogger(__name__)
+        self.prompt_service = get_prompt_service(settings)
         
         # Initialize tokenizer for the model
         try:
@@ -76,12 +78,17 @@ class AIEvaluator:
             # Truncate content if needed
             content = self.truncate_content_for_evaluation(title, content)
             
-            # Create evaluation prompt
-            prompt = self.settings.ai_scoring_prompt.format(
+            # Get evaluation prompt from database
+            prompt = await self.prompt_service.get_formatted_prompt(
+                'ai_scoring_prompt',
                 title=title,
                 content_excerpt=content,
                 source_name=source_name
             )
+            
+            if not prompt:
+                self.logger.error("AI scoring prompt not found in database")
+                return self.create_default_evaluation(article_data)
             
             # Call OpenAI API
             evaluation_result = await self.call_openai_api(prompt)

@@ -62,6 +62,24 @@ class Settings(BaseSettings):
     MAX_CONCURRENT_REQUESTS: int = Field(default=10, description="Maximum concurrent requests")
     BATCH_SIZE: int = Field(default=100, description="Batch size for processing")
     
+    # Slack Configuration
+    SLACK_WEBHOOK_URL: Optional[str] = Field(
+        default=None, 
+        description="Slack webhook URL for daily digest posting"
+    )
+    SLACK_ERROR_WEBHOOK_URL: Optional[str] = Field(
+        default=None,
+        description="Slack webhook URL for error notifications (personal DM or error channel)"
+    )
+    SLACK_ENABLED: bool = Field(
+        default=True, 
+        description="Enable/disable Slack notifications"
+    )
+    SLACK_CHANNEL_NAME: str = Field(
+        default="ai-daily-digest",
+        description="Slack channel name (for documentation purposes)"
+    )
+    
     @field_validator('TWITTER_SERVICE')
     @classmethod
     def validate_twitter_service(cls, v):
@@ -98,43 +116,8 @@ class Settings(BaseSettings):
             {"name": "The Gradient", "url": "https://thegradient.pub/rss/"}
         ]
     
-    @property
-    def ai_scoring_prompt(self) -> str:
-        """Get the AI scoring prompt template"""
-        return """
-You are evaluating AI news for business leaders with the philosophy: "Don't panic. Prepare your data. Stay agnostic."
-
-ARTICLE: {title} - {content_excerpt}
-SOURCE: {source_name}
-
-Rate this article 0-100 based on:
-1. Business relevance for tech executives (30 pts)
-2. Data strategy/vendor independence themes (25 pts) 
-3. Actionable insights vs pure research (20 pts)
-4. Enterprise decision-making impact (15 pts)
-5. Recency and relevance (10 pts)
-
-PRIORITIZE:
-- Vendor lock-in problems and solutions
-- Data infrastructure strategies  
-- Enterprise AI implementation realities
-- Platform-agnostic approaches
-- Business model disruptions
-
-AVOID:
-- Pure academic research
-- Consumer AI products
-- Vendor marketing disguised as news
-- Technical papers without business implications
-
-RESPOND WITH JSON:
-{
-  "relevance_score": 0-100,
-  "business_impact_score": 0-100, 
-  "key_themes": ["theme1", "theme2"],
-  "reasoning": "Brief explanation of score"
-}
-"""
+    # Note: AI prompts are now managed dynamically via the PromptService
+    # See services/prompt_service.py for prompt management
     
     model_config = {
         "env_file": ".env",

@@ -64,9 +64,14 @@ def test_settings():
         twitter_accounts = settings.twitter_accounts_list
         print(f"✓ Twitter accounts configured: {len(twitter_accounts)} accounts")
         
-        # Test AI scoring prompt
-        prompt = settings.ai_scoring_prompt
-        print(f"✓ AI scoring prompt configured: {len(prompt)} characters")
+        # Test AI prompt service (synchronous test)
+        try:
+            from services.prompt_service import get_prompt_service
+            prompt_service = get_prompt_service(settings)
+            # Test that service initializes correctly
+            print("✓ AI prompt service initialized successfully")
+        except Exception as e:
+            print(f"✗ AI prompt service initialization failed: {e}")
         
         return True
         

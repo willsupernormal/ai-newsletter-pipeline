@@ -72,6 +72,11 @@ jobs:
         MAX_CONCURRENT_REQUESTS: "5"  # Conservative for GitHub Actions
         BATCH_SIZE: "50"
         
+        # Slack Configuration
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        SLACK_ERROR_WEBHOOK_URL: ${{ secrets.SLACK_ERROR_WEBHOOK_URL }}
+        SLACK_ENABLED: "true"
+        
       run: |
         if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
           python -c "import asyncio; from datetime import datetime; from run_ai_digest_pipeline import run_ai_digest_pipeline; print('Running enhanced AI digest pipeline in dry-run mode'); asyncio.run(run_ai_digest_pipeline(datetime.now().strftime('%Y-%m-%d'), dry_run=True))"
