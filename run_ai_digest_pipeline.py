@@ -78,7 +78,7 @@ async def run_ai_digest_pipeline(target_date: date = None):
         
         # Store daily digest
         digest_id = await digest_storage.store_daily_digest(
-            digest_date=datetime.strptime(target_date, '%Y-%m-%d').date(),
+            digest_date=target_date if isinstance(target_date, date) else datetime.strptime(target_date, '%Y-%m-%d').date(),
             summary_text=digest_result['digest_text'],
             key_insights=digest_result['key_insights'],
             selected_articles=digest_result['selected_articles'],

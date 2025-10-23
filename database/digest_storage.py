@@ -48,7 +48,16 @@ class DigestStorage:
                     'business_impact_score': article.get('business_impact_score', 55.0),
                     'selected_for_digest': True,
                     'selected_for_newsletter': False,
-                    'scraped_at': datetime.now().isoformat()
+                    'scraped_at': datetime.now().isoformat(),
+                    
+                    # Enhanced context fields (NEW)
+                    'ai_summary': article.get('ai_summary', ''),
+                    'ai_summary_short': article.get('ai_summary_short', ''),
+                    'key_quotes': article.get('key_quotes', []),
+                    'key_metrics': article.get('key_metrics', []),
+                    'why_it_matters': article.get('why_it_matters', ''),
+                    'primary_theme': article.get('primary_theme', ''),
+                    'content_type': article.get('content_type', 'news')
                 }
                 
                 # Add Twitter-specific fields if present

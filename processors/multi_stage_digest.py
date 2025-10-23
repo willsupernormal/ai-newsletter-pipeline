@@ -297,6 +297,88 @@ SELECTED ARTICLES:
             fallback_digest = f"Daily digest for {date.today()}: {len(fallback_articles)} articles selected (fallback mode)"
             return fallback_articles, fallback_digest, ["Fallback mode - manual review needed"], []
     
+    async def stage_2_5_context_enrichment(self, selected_articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Stage 2.5: Enrich selected articles with detailed context
+        
+        For each article, generate:
+        - Comprehensive summary (300-500 words)
+        - Brief summary (500 chars for Slack)
+        - Key metrics (2-3)
+        - Key quotes (1-2)
+        - Why it matters statement
+        - Theme classification
+        """
+        
+        self.logger.info(f"Stage 2.5: Enriching context for {len(selected_articles)} articles")
+        enriched_articles = []
+        
+        for idx, article in enumerate(selected_articles, 1):
+            try:
+                self.logger.info(f"Enriching article {idx}/{len(selected_articles)}: {article['title']}")
+                
+                # Get context enrichment prompt
+                prompt = await self.prompt_service.get_formatted_prompt(
+                    'context_enrichment_prompt',
+                    title=article['title'],
+                    source=article['source_name'],
+                    content=article.get('content_excerpt', '')
+                )
+                
+                if not prompt:
+                    self.logger.warning(f"Context enrichment prompt not found, using fallback for: {article['title']}")
+                    # Use article as-is without enrichment
+                    enriched_articles.append(article)
+                    continue
+                
+                # Call OpenAI for context enrichment
+                response = await self.client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                    max_tokens=2000
+                )
+                
+                content = response.choices[0].message.content.strip()
+                
+                # Parse JSON response
+                if content.startswith('```json'):
+                    content = content.replace('```json', '').replace('```', '').strip()
+                elif content.startswith('```'):
+                    content = content.replace('```', '').strip()
+                
+                context = json.loads(content)
+                
+                # Merge context into article
+                enriched_article = article.copy()
+                enriched_article.update({
+                    'ai_summary': context.get('ai_summary', ''),
+                    'ai_summary_short': context.get('ai_summary_short', '')[:500],  # Enforce 500 char limit
+                    'key_metrics': context.get('key_metrics', []),
+                    'key_quotes': context.get('key_quotes', []),
+                    'why_it_matters': context.get('why_it_matters', ''),
+                    'primary_theme': context.get('primary_theme', ''),
+                    'content_type': context.get('content_type', 'news')
+                })
+                
+                enriched_articles.append(enriched_article)
+                
+                self.logger.info(f"✓ Enriched: {article['title'][:50]}... (Theme: {context.get('primary_theme', 'N/A')})")
+                
+            except json.JSONDecodeError as e:
+                self.logger.error(f"Failed to parse JSON for {article['title']}: {e}")
+                self.logger.debug(f"Raw response: {content[:200]}...")
+                # Fall back to original article
+                enriched_articles.append(article)
+                
+            except Exception as e:
+                self.logger.error(f"Failed to enrich context for {article['title']}: {e}")
+                # Fall back to original article
+                enriched_articles.append(article)
+        
+        self.logger.info(f"Stage 2.5 complete: Enriched {len(enriched_articles)} articles")
+        return enriched_articles
+    
     async def create_daily_digest(self, all_articles: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Complete two-stage digest creation process"""
         
@@ -316,12 +398,15 @@ SELECTED ARTICLES:
         # Stage 2: Final selection and digest creation
         final_articles, digest_text, key_insights, article_summaries = await self.stage_2_final_selection(stage_1_articles)
         
+        # Stage 2.5: Context enrichment (NEW)
+        enriched_articles = await self.stage_2_5_context_enrichment(final_articles)
+        
         return {
-            'selected_articles': final_articles,
+            'selected_articles': enriched_articles,  # Use enriched articles
             'digest_text': digest_text,
             'key_insights': key_insights,
             'article_summaries': article_summaries,
             'total_processed': len(all_articles),
             'stage_1_count': len(stage_1_articles),
-            'final_count': len(final_articles)
+            'final_count': len(enriched_articles)
         }

@@ -66,27 +66,20 @@ class SlackNotifier:
             }
         })
         
-        # Summary section
+        # Brief summary section (50 words max)
+        # Extract first ~50 words from summary_text
+        words = summary_text.split()
+        brief_summary = ' '.join(words[:50])
+        if len(words) > 50:
+            brief_summary += "..."
+        
         blocks.append({
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*📊 Summary*\n{summary_text}"
+                "text": f"*📊 Summary*\n{brief_summary}"
             }
         })
-        
-        # Key insights section
-        if key_insights:
-            insights_text = "*💡 Key Insights*\n" + "\n".join(
-                f"• {insight}" for insight in key_insights
-            )
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": insights_text
-                }
-            })
         
         # Divider before articles
         blocks.append({"type": "divider"})
@@ -100,25 +93,49 @@ class SlackNotifier:
             }
         })
         
-        # Individual articles
+        # Individual articles with enhanced context
         for idx, article in enumerate(selected_articles[:5], 1):
             # Number emoji mapping
             number_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"]
             
-            # Get article summary (from AI or excerpt)
-            article_summary = article.get('summary', article.get('content_excerpt', ''))
+            # Use ai_summary_short (500 chars) if available, otherwise fall back to excerpt
+            summary = article.get('ai_summary_short', article.get('summary', article.get('content_excerpt', '')))[:500]
             
-            # Truncate summary if too long (Slack has limits)
-            if len(article_summary) > 300:
-                article_summary = article_summary[:297] + "..."
+            # Build article text with enhanced context
+            article_text = f"*{number_emojis[idx-1]} {article['title']}*\n_{article['source_name']}_\n\n"
             
-            # Format article block
-            article_text = (
-                f"*{number_emojis[idx-1]} {article['title']}*\n"
-                f"_{article['source_name']}_\n\n"
-                f"{article_summary}\n\n"
-                f"<{article['url']}|🔗 Read Article>"
-            )
+            # Add summary
+            article_text += f"{summary}\n\n"
+            
+            # Add key metrics (if available)
+            metrics = article.get('key_metrics', [])
+            if metrics and len(metrics) > 0:
+                article_text += "*Key Data:*\n"
+                for metric in metrics[:3]:  # Max 3 metrics
+                    metric_name = metric.get('metric', 'Metric')
+                    metric_value = metric.get('value', 'N/A')
+                    article_text += f"• {metric_name}: {metric_value}\n"
+                article_text += "\n"
+            
+            # Add key quote (if available)
+            quotes = article.get('key_quotes', [])
+            if quotes and len(quotes) > 0:
+                quote = quotes[0]  # Use first quote
+                quote_text = quote.get('quote', '')
+                speaker = quote.get('speaker', '')
+                if quote_text:
+                    article_text += f"*Quote:* \"{quote_text}\"\n"
+                    if speaker:
+                        article_text += f"   _{speaker}_\n"
+                    article_text += "\n"
+            
+            # Add "Why This Matters"
+            why_matters = article.get('why_it_matters', '')
+            if why_matters:
+                article_text += f"*Why This Matters:* {why_matters}\n\n"
+            
+            # Add link
+            article_text += f"<{article['url']}|🔗 Read Full Article>"
             
             blocks.append({
                 "type": "section",
@@ -131,6 +148,20 @@ class SlackNotifier:
             # Add divider between articles (except after last one)
             if idx < len(selected_articles[:5]):
                 blocks.append({"type": "divider"})
+        
+        # Key insights section (after articles)
+        blocks.append({"type": "divider"})
+        if key_insights:
+            insights_text = "*💡 Key Insights*\n" + "\n".join(
+                f"• {insight}" for insight in key_insights
+            )
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": insights_text
+                }
+            })
         
         # Stats footer
         sources_text = f"{rss_count} RSS + {twitter_count} Twitter" if rss_count or twitter_count else str(total_processed)
