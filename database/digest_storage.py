@@ -93,8 +93,14 @@ class DigestStorage:
                 'article_summaries': article_summaries or []
             }
             
-            # Store digest
-            response = self.db_client.client.table('daily_digests').insert(digest_data).execute()
+            # Check if digest already exists for this date
+            existing_digest = await self.get_daily_digest(digest_date)
+            is_update = existing_digest is not None
+            
+            # Store digest (upsert: insert or update if exists)
+            response = self.db_client.client.table('daily_digests')\
+                .upsert(digest_data, on_conflict='digest_date')\
+                .execute()
             
             if response.data:
                 digest_id = str(response.data[0]['id'])
@@ -106,7 +112,8 @@ class DigestStorage:
                         .eq('id', article_id)\
                         .execute()
                 
-                self.logger.info(f"Stored daily digest {digest_id} with {len(article_ids)} articles")
+                action = "Updated" if is_update else "Created"
+                self.logger.info(f"{action} daily digest {digest_id} with {len(article_ids)} articles")
                 return digest_id
             
             raise Exception("Insert returned no data")
