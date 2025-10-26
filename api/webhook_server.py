@@ -61,16 +61,32 @@ async def slack_interactions(request: Request):
         timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
         signature = request.headers.get('X-Slack-Signature', '')
         
-        # Get raw body for signature verification
+        # Get raw body
         body = await request.body()
         body_str = body.decode('utf-8')
         
-        # Verify Slack signature
+        # Try to parse as JSON first (for URL verification)
+        try:
+            payload = json.loads(body_str)
+            
+            # Handle URL verification challenge from Slack
+            if payload.get('type') == 'url_verification':
+                logger.info("Responding to Slack URL verification challenge")
+                # Verify signature for challenge too
+                if not webhook_handler.verify_slack_signature(timestamp, body_str, signature):
+                    logger.warning("Invalid Slack signature on challenge")
+                    raise HTTPException(status_code=401, detail="Invalid signature")
+                return JSONResponse(content={"challenge": payload.get('challenge')})
+        except json.JSONDecodeError:
+            # Not JSON, must be form-encoded interaction
+            pass
+        
+        # Verify Slack signature for regular interactions
         if not webhook_handler.verify_slack_signature(timestamp, body_str, signature):
             logger.warning("Invalid Slack signature")
             raise HTTPException(status_code=401, detail="Invalid signature")
         
-        # Parse form data
+        # Parse form data for button interactions
         form_data = parse_qs(body_str)
         
         # Extract payload
@@ -80,11 +96,6 @@ async def slack_interactions(request: Request):
         
         payload_str = form_data['payload'][0]
         payload = json.loads(payload_str)
-        
-        # Handle URL verification challenge from Slack
-        if payload.get('type') == 'url_verification':
-            logger.info("Responding to Slack URL verification challenge")
-            return JSONResponse(content={"challenge": payload.get('challenge')})
         
         # Log interaction
         action_type = payload.get('type', 'unknown')
