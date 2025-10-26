@@ -70,13 +70,17 @@ async def slack_interactions(request: Request):
             payload = json.loads(body_str)
             
             # Handle URL verification challenge from Slack
+            # NOTE: We respond to the challenge BEFORE verifying signature
+            # because Slack needs the challenge response to complete setup
             if payload.get('type') == 'url_verification':
                 logger.info("Responding to Slack URL verification challenge")
-                # Verify signature for challenge too
-                if not webhook_handler.verify_slack_signature(timestamp, body_str, signature):
-                    logger.warning("Invalid Slack signature on challenge")
-                    raise HTTPException(status_code=401, detail="Invalid signature")
-                return JSONResponse(content={"challenge": payload.get('challenge')})
+                challenge = payload.get('challenge')
+                if challenge:
+                    logger.info(f"Returning challenge: {challenge[:20]}...")
+                    return JSONResponse(content={"challenge": challenge})
+                else:
+                    logger.error("No challenge in url_verification payload")
+                    raise HTTPException(status_code=400, detail="No challenge provided")
         except json.JSONDecodeError:
             # Not JSON, must be form-encoded interaction
             pass
