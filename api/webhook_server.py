@@ -81,6 +81,11 @@ async def slack_interactions(request: Request):
         payload_str = form_data['payload'][0]
         payload = json.loads(payload_str)
         
+        # Handle URL verification challenge from Slack
+        if payload.get('type') == 'url_verification':
+            logger.info("Responding to Slack URL verification challenge")
+            return JSONResponse(content={"challenge": payload.get('challenge')})
+        
         # Log interaction
         action_type = payload.get('type', 'unknown')
         user = payload.get('user', {}).get('username', 'unknown')
