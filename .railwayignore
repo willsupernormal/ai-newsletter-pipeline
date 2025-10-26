@@ -1,0 +1,49 @@
+# Exclude files not needed for webhook server deployment
+# This keeps the Docker image small
+
+# Test files
+test_*.py
+*_test.py
+pytest.ini
+.pytest_cache/
+
+# Development files
+.vscode/
+.idea/
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Documentation (not needed at runtime)
+docs/
+*.md
+!README.md
+
+# Data and cache
+*.csv
+*.json
+*.db
+*.sqlite
+.cache/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment files (use Railway env vars instead)
+.env
+.env.*
+
+# Unnecessary for webhook server
+processors/
+scrapers/twitter_scraper.py
+scrapers/rss_scraper.py
+run_*.py
+add_*.py
+main.py
+test_*.py
+debug_*.py
