@@ -57,6 +57,11 @@ async def slack_interactions(request: Request):
     containing JSON data about the interaction.
     """
     try:
+        # LOG EVERYTHING FOR DEBUGGING
+        logger.info("=" * 80)
+        logger.info("RECEIVED REQUEST TO /slack/interactions")
+        logger.info(f"Headers: {dict(request.headers)}")
+        
         # Get headers for signature verification
         timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
         signature = request.headers.get('X-Slack-Signature', '')
@@ -64,6 +69,9 @@ async def slack_interactions(request: Request):
         # Get raw body
         body = await request.body()
         body_str = body.decode('utf-8')
+        
+        logger.info(f"Body (first 500 chars): {body_str[:500]}")
+        logger.info(f"Content-Type: {request.headers.get('content-type')}")
         
         # Try to parse as JSON first (for URL verification)
         try:
