@@ -4,7 +4,7 @@ Database storage for daily digests and multi-source content
 
 import logging
 from datetime import date, datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from uuid import UUID
 
 from database.supabase_simple import SimpleSupabaseClient
@@ -18,7 +18,7 @@ class DigestStorage:
         self.logger = logging.getLogger(__name__)
     
     async def store_daily_digest(
-        self, 
+        self,
         digest_date: date,
         summary_text: str,
         key_insights: List[str],
@@ -26,12 +26,18 @@ class DigestStorage:
         total_processed: int,
         ai_reasoning: str = "",
         article_summaries: List[Dict[str, Any]] = None
-    ) -> str:
-        """Store daily digest and return digest ID"""
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """
+        Store daily digest and return digest ID + articles with IDs
+        
+        Returns:
+            tuple: (digest_id, articles_with_ids)
+        """
         
         try:
             # First, store all articles (both selected and non-selected)
             article_ids = []
+            articles_with_ids = []
             for article in selected_articles:
                 # Add digest metadata and convert datetime objects
                 article_data = {
@@ -68,12 +74,24 @@ class DigestStorage:
                 try:
                     article_id = await self.db_client.insert_article(article_data)
                     article_ids.append(article_id)
+                    
+                    # Add ID to article for Slack buttons
+                    article_with_id = article.copy()
+                    article_with_id['id'] = article_id
+                    articles_with_ids.append(article_with_id)
+                    
                 except Exception as e:
                     if 'duplicate key' in str(e):
                         # Article already exists, find its ID
                         existing = await self.db_client.get_article_by_url(article_data['url'])
                         if existing:
                             article_ids.append(existing['id'])
+                            
+                            # Add ID to article for Slack buttons
+                            article_with_id = article.copy()
+                            article_with_id['id'] = existing['id']
+                            articles_with_ids.append(article_with_id)
+                            
                             self.logger.debug(f"Using existing article ID for {article_data['url']}")
                         else:
                             self.logger.error(f"Could not find existing article for {article_data['url']}")
@@ -114,7 +132,7 @@ class DigestStorage:
                 
                 action = "Updated" if is_update else "Created"
                 self.logger.info(f"{action} daily digest {digest_id} with {len(article_ids)} articles")
-                return digest_id
+                return digest_id, articles_with_ids
             
             raise Exception("Insert returned no data")
             

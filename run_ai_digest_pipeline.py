@@ -16,8 +16,13 @@ from database.digest_storage import DigestStorage
 from services.slack_notifier import SlackNotifier
 from utils.logger import setup_logger
 
-async def run_ai_digest_pipeline(target_date: date = None):
-    """Run complete AI digest pipeline with multi-stage filtering"""
+async def run_ai_digest_pipeline(target_date: date = None, force: bool = False):
+    """Run complete AI digest pipeline with multi-stage filtering
+    
+    Args:
+        target_date: Date to create digest for (default: today)
+        force: If True, regenerate digest even if one exists for this date
+    """
     
     # Setup logging
     setup_logger('INFO')
@@ -42,11 +47,15 @@ async def run_ai_digest_pipeline(target_date: date = None):
         
         # Check if digest already exists for this date
         existing_digest = await digest_storage.get_daily_digest(target_date)
-        if existing_digest:
-            logger.info(f"Digest already exists for {target_date}")
+        if existing_digest and not force:
+            logger.info(f"Digest already exists for {target_date} (use force=True to regenerate)")
             print(f"📰 Daily digest already exists for {target_date}")
             print(f"Summary: {existing_digest['summary_text'][:200]}...")
+            print(f"\n💡 To regenerate, run with force=True")
             return True
+        elif existing_digest and force:
+            logger.info(f"Force regenerating digest for {target_date}")
+            print(f"🔄 Regenerating digest for {target_date}...")
         
         # Stage 0: Data Collection & Aggregation
         logger.info("Stage 0: Collecting content from RSS + Twitter")
@@ -76,8 +85,8 @@ async def run_ai_digest_pipeline(target_date: date = None):
             selected_urls
         )
         
-        # Store daily digest
-        digest_id = await digest_storage.store_daily_digest(
+        # Store daily digest (returns digest_id and articles with IDs)
+        digest_id, articles_with_ids = await digest_storage.store_daily_digest(
             digest_date=target_date if isinstance(target_date, date) else datetime.strptime(target_date, '%Y-%m-%d').date(),
             summary_text=digest_result['digest_text'],
             key_insights=digest_result['key_insights'],
@@ -100,22 +109,23 @@ async def run_ai_digest_pipeline(target_date: date = None):
         print(f"  • Digest ID: {digest_id}")
         
         print(f"\n📰 Selected Articles:")
-        for i, article in enumerate(digest_result['selected_articles'], 1):
+        for i, article in enumerate(articles_with_ids, 1):
             print(f"  {i}. {article['title']}")
             print(f"     Source: {article['source_name']} ({article['source_type']})")
+            print(f"     ID: {article['id']}")
         
         print(f"\n💡 Key Insights:")
         for insight in digest_result['key_insights']:
             print(f"  • {insight}")
         
-        # Post to Slack
+        # Post to Slack (use articles_with_ids so buttons have article IDs)
         if settings.SLACK_WEBHOOK_URL and settings.SLACK_ENABLED:
             logger.info("Posting digest to Slack...")
             slack_success = slack_notifier.post_digest(
                 digest_date=target_date if isinstance(target_date, date) else datetime.strptime(target_date, '%Y-%m-%d').date(),
                 summary_text=digest_result['digest_text'],
                 key_insights=digest_result['key_insights'],
-                selected_articles=digest_result['selected_articles'],
+                selected_articles=articles_with_ids,  # Use articles with IDs for buttons
                 total_processed=digest_result['total_processed'],
                 rss_count=aggregated_content.rss_count,
                 twitter_count=aggregated_content.twitter_count
@@ -185,6 +195,10 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "show":
         # Show recent digests
         asyncio.run(show_recent_digests())
+    elif len(sys.argv) > 1 and sys.argv[1] == "force":
+        # Force regenerate digest
+        success = asyncio.run(run_ai_digest_pipeline(force=True))
+        exit(0 if success else 1)
     else:
         # Run digest pipeline
         success = asyncio.run(run_ai_digest_pipeline())

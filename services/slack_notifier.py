@@ -145,6 +145,26 @@ class SlackNotifier:
                 }
             })
             
+            # Add "Add to Pipeline" button (Phase 2)
+            article_id = article.get('id', article.get('url'))  # Use ID or URL as fallback
+            blocks.append({
+                "type": "actions",
+                "block_id": f"article_{idx}",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "🔖 Add to Pipeline",
+                            "emoji": True
+                        },
+                        "style": "primary",
+                        "value": str(article_id),
+                        "action_id": "add_to_pipeline"
+                    }
+                ]
+            })
+            
             # Add divider between articles (except after last one)
             if idx < len(selected_articles[:5]):
                 blocks.append({"type": "divider"})

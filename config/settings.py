@@ -80,6 +80,40 @@ class Settings(BaseSettings):
         description="Slack channel name (for documentation purposes)"
     )
     
+    # Slack App Configuration (Phase 2 - Interactive Buttons)
+    SLACK_BOT_TOKEN: Optional[str] = Field(
+        default=None,
+        description="Slack bot user OAuth token for posting interactive messages"
+    )
+    SLACK_SIGNING_SECRET: Optional[str] = Field(
+        default=None,
+        description="Slack signing secret for verifying webhook requests"
+    )
+    
+    # Airtable Configuration (Phase 2 - Content Pipeline)
+    AIRTABLE_API_KEY: Optional[str] = Field(
+        default=None,
+        description="Airtable API key for content pipeline integration"
+    )
+    AIRTABLE_BASE_ID: Optional[str] = Field(
+        default=None,
+        description="Airtable base ID for content pipeline"
+    )
+    AIRTABLE_TABLE_NAME: str = Field(
+        default="Content Pipeline",
+        description="Airtable table name for storing articles"
+    )
+    
+    # Webhook Server Configuration (Phase 2)
+    WEBHOOK_PORT: int = Field(
+        default=8000,
+        description="Port for webhook server"
+    )
+    WEBHOOK_SERVER_URL: Optional[str] = Field(
+        default=None,
+        description="Public URL of deployed webhook server (e.g., https://your-app.railway.app)"
+    )
+    
     @field_validator('TWITTER_SERVICE')
     @classmethod
     def validate_twitter_service(cls, v):
@@ -120,7 +154,7 @@ class Settings(BaseSettings):
     # See services/prompt_service.py for prompt management
     
     model_config = {
-        "env_file": ".env",
+        "env_file": os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"),
         "env_file_encoding": "utf-8", 
         "case_sensitive": True
     }
