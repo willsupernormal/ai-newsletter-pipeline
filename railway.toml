@@ -1,0 +1,11 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacksPlan.phases.setup]
+nixPkgs = ["python313"]
+
+[build.nixpacksPlan.phases.install]
+cmds = ["pip install -r requirements-webhook.txt"]
+
+[deploy]
+startCommand = "python -m uvicorn api.webhook_server:app --host 0.0.0.0 --port $PORT"
