@@ -7,6 +7,7 @@ WORKDIR /app
 # Install system dependencies (minimal)
 RUN apt-get update && apt-get install -y \
     gcc \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only necessary files for webhook server
@@ -25,9 +26,9 @@ RUN pip install --no-cache-dir -r requirements-webhook.txt
 # Expose port
 EXPOSE 8000
 
-# Health check
+# Health check (using curl instead of requests)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Run webhook server
 CMD ["python", "-m", "uvicorn", "api.webhook_server:app", "--host", "0.0.0.0", "--port", "8000"]
