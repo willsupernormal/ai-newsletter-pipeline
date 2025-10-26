@@ -48,6 +48,36 @@ async def health_check():
     }
 
 
+@app.api_route("/slack/test", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def slack_test(request: Request):
+    """
+    Test endpoint that accepts ANY method and logs everything
+    Use this to see what Slack is actually sending
+    """
+    body = await request.body()
+    body_str = body.decode('utf-8') if body else "NO BODY"
+    
+    logger.info("=" * 80)
+    logger.info(f"TEST ENDPOINT HIT: {request.method} /slack/test")
+    logger.info(f"Headers: {dict(request.headers)}")
+    logger.info(f"Body: {body_str}")
+    logger.info("=" * 80)
+    
+    # Try to parse as JSON and respond to challenge
+    try:
+        data = json.loads(body_str)
+        if data.get('type') == 'url_verification':
+            return JSONResponse(content={"challenge": data.get('challenge')})
+    except:
+        pass
+    
+    return JSONResponse(content={
+        "status": "received",
+        "method": request.method,
+        "body_length": len(body_str)
+    })
+
+
 @app.post("/slack/interactions")
 async def slack_interactions(request: Request):
     """
