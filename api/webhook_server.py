@@ -78,6 +78,60 @@ async def slack_test(request: Request):
     })
 
 
+@app.api_route("/slack/simple", methods=["GET", "POST"])
+async def slack_simple(request: Request):
+    """
+    Simplest possible endpoint - no auth, no parsing, just respond
+    """
+    body = await request.body()
+    body_str = body.decode('utf-8') if body else ""
+    
+    logger.info(f"SIMPLE ENDPOINT: {request.method} - Body length: {len(body_str)}")
+    
+    # Always respond with challenge if present
+    try:
+        data = json.loads(body_str)
+        if 'challenge' in data:
+            logger.info(f"Returning challenge: {data['challenge']}")
+            return {"challenge": data['challenge']}
+    except:
+        pass
+    
+    return {"ok": True}
+
+
+@app.api_route("/slack/minimal", methods=["GET", "POST"])
+async def slack_minimal(request: Request):
+    """
+    Absolute minimal endpoint - just return OK
+    """
+    logger.info(f"MINIMAL ENDPOINT HIT: {request.method}")
+    return {"ok": True}
+
+
+@app.post("/slack/challenge")
+async def slack_challenge(request: Request):
+    """
+    Dedicated challenge endpoint - only handles url_verification
+    """
+    try:
+        data = await request.json()
+        logger.info(f"CHALLENGE ENDPOINT: Received type={data.get('type')}")
+        
+        if data.get('type') == 'url_verification':
+            challenge = data.get('challenge')
+            logger.info(f"Responding with challenge: {challenge}")
+            return JSONResponse(
+                content={"challenge": challenge},
+                headers={"Content-Type": "application/json"}
+            )
+        
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"Challenge endpoint error: {e}")
+        return {"error": str(e)}
+
+
 @app.post("/slack/interactions")
 async def slack_interactions(request: Request):
     """
