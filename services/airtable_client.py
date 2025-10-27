@@ -155,10 +155,10 @@ class AirtableClient:
                 fields['Digest Date'] = article_data['digest_date']
         
         # Theme and Content Type
-        if 'primary_theme' in article_data:
+        if 'primary_theme' in article_data and article_data['primary_theme']:
             fields['Theme'] = article_data['primary_theme']
         
-        if 'content_type' in article_data:
+        if 'content_type' in article_data and article_data['content_type']:
             fields['Content Type'] = article_data['content_type'].capitalize()
         
         # Priority (default to Medium)
