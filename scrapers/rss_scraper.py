@@ -41,9 +41,21 @@ class RSScraper:
     
     async def __aenter__(self):
         """Async context manager entry"""
+        # Use browser-like headers to avoid 403 errors
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/rss+xml, application/xml, application/atom+xml, text/xml, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
         self.session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=self.settings.RSS_REQUEST_TIMEOUT),
-            connector=aiohttp.TCPConnector(limit=self.settings.MAX_CONCURRENT_REQUESTS)
+            connector=aiohttp.TCPConnector(limit=self.settings.MAX_CONCURRENT_REQUESTS),
+            headers=headers
         )
         return self
     
