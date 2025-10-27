@@ -96,10 +96,18 @@ class SlackWebhookHandler:
                     )
                 )
                 
-                # Return immediate acknowledgment
+                # Return immediate acknowledgment with button update
+                # Get the original message blocks and update the clicked button
+                original_message = payload.get('message', {})
+                updated_blocks = self._update_button_to_processing(
+                    original_message.get('blocks', []),
+                    payload.get('actions', [{}])[0].get('block_id')
+                )
+                
                 return {
                     "text": "⏳ Processing... Adding article to pipeline",
-                    "replace_original": False
+                    "blocks": updated_blocks,
+                    "replace_original": True  # Replace to update button
                 }
             else:
                 self.logger.warning(f"Unknown action_id: {action_id}")
@@ -143,6 +151,13 @@ class SlackWebhookHandler:
             # Fetch article from Supabase
             article = await self._fetch_article_from_supabase(article_id)
             
+            # Log what we got from Supabase
+            self.logger.info(f"[ASYNC] Article data keys: {list(article.keys()) if article else 'None'}")
+            if article:
+                self.logger.info(f"[ASYNC] Has ai_summary_short: {bool(article.get('ai_summary_short'))}")
+                self.logger.info(f"[ASYNC] Has key_metrics: {bool(article.get('key_metrics'))}")
+                self.logger.info(f"[ASYNC] Has why_it_matters: {bool(article.get('why_it_matters'))}")
+            
             if not article:
                 self._send_slack_update(response_url, {
                     "text": f"❌ Article not found: {article_id}",
@@ -170,13 +185,21 @@ class SlackWebhookHandler:
             if record_id:
                 self.logger.info(f"[ASYNC] ✓ Added to Airtable: {record_id}")
                 
-                # Send success update
+                # Update button to show success
+                original_message = payload.get('message', {})
+                success_blocks = self._update_button_to_success(
+                    original_message.get('blocks', []),
+                    payload.get('actions', [{}])[0].get('block_id')
+                )
+                
+                # Send success update with updated button
                 self._send_slack_update(response_url, {
                     "text": f"✅ *Added to Pipeline!*\n\n*{article['title']}*\n\n"
                            f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
                            f"🔗 <{article['url']}|View Original>\n"
                            f"📋 Check Airtable: Content Pipeline",
-                    "replace_original": False
+                    "blocks": success_blocks,
+                    "replace_original": True
                 })
             else:
                 self._send_slack_update(response_url, {
@@ -199,6 +222,60 @@ class SlackWebhookHandler:
                 self.logger.error(f"Failed to send Slack update: {response.status_code}")
         except Exception as e:
             self.logger.error(f"Error sending Slack update: {e}")
+    
+    def _update_button_to_processing(self, blocks: list, clicked_block_id: str) -> list:
+        """
+        Update the clicked button to show processing state
+        
+        Args:
+            blocks: Original message blocks
+            clicked_block_id: ID of the block containing the clicked button
+            
+        Returns:
+            Updated blocks with button changed to processing state
+        """
+        import copy
+        updated_blocks = copy.deepcopy(blocks)
+        
+        for block in updated_blocks:
+            if block.get('block_id') == clicked_block_id and block.get('type') == 'actions':
+                # Update the button
+                for element in block.get('elements', []):
+                    if element.get('action_id') == 'add_to_pipeline':
+                        element['text']['text'] = '⏳ Processing...'
+                        element['style'] = 'default'  # Change from primary (blue) to default (gray)
+                        # Optionally disable the button (though Slack will ignore further clicks anyway)
+                break
+        
+        return updated_blocks
+    
+    def _update_button_to_success(self, blocks: list, clicked_block_id: str) -> list:
+        """
+        Update the clicked button to show success state
+        
+        Args:
+            blocks: Original message blocks
+            clicked_block_id: ID of the block containing the clicked button
+            
+        Returns:
+            Updated blocks with button changed to success state
+        """
+        import copy
+        updated_blocks = copy.deepcopy(blocks)
+        
+        for block in updated_blocks:
+            if block.get('block_id') == clicked_block_id and block.get('type') == 'actions':
+                # Update the button
+                for element in block.get('elements', []):
+                    if element.get('action_id') == 'add_to_pipeline':
+                        element['text']['text'] = '✅ Added'
+                        element['style'] = 'primary'  # Keep it blue but show checkmark
+                        # Remove action_id so button becomes non-clickable
+                        element.pop('action_id', None)
+                        element.pop('value', None)
+                break
+        
+        return updated_blocks
     
     async def handle_add_to_pipeline(
         self,
