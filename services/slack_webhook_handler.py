@@ -7,6 +7,8 @@ import logging
 import json
 import hmac
 import hashlib
+import asyncio
+import requests
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -69,6 +71,8 @@ class SlackWebhookHandler:
         """
         Main handler for Slack interactions
         
+        Responds immediately to Slack (< 3 seconds) and processes in background
+        
         Args:
             payload: Slack interaction payload
             
@@ -79,12 +83,24 @@ class SlackWebhookHandler:
             action_id = payload.get('actions', [{}])[0].get('action_id')
             user_id = payload.get('user', {}).get('id')
             user_name = payload.get('user', {}).get('username', 'Unknown')
+            response_url = payload.get('response_url')  # For async updates
             
             self.logger.info(f"Received action: {action_id} from user: {user_name}")
             
             # Route to appropriate handler
             if action_id == 'add_to_pipeline':
-                return await self.handle_add_to_pipeline(payload, user_id, user_name)
+                # Start background task
+                asyncio.create_task(
+                    self._process_add_to_pipeline_async(
+                        payload, user_id, user_name, response_url
+                    )
+                )
+                
+                # Return immediate acknowledgment
+                return {
+                    "text": "⏳ Processing... Adding article to pipeline",
+                    "replace_original": False
+                }
             else:
                 self.logger.warning(f"Unknown action_id: {action_id}")
                 return {
@@ -98,6 +114,91 @@ class SlackWebhookHandler:
                 "text": f"❌ Error: {str(e)}",
                 "replace_original": False
             }
+    
+    async def _process_add_to_pipeline_async(
+        self,
+        payload: Dict[str, Any],
+        user_id: str,
+        user_name: str,
+        response_url: str
+    ):
+        """
+        Process "Add to Pipeline" in background and update Slack via response_url
+        
+        This runs asynchronously after returning immediate response to Slack
+        """
+        try:
+            # Extract article ID
+            article_id = payload.get('actions', [{}])[0].get('value')
+            
+            if not article_id:
+                self._send_slack_update(response_url, {
+                    "text": "❌ No article ID provided",
+                    "replace_original": False
+                })
+                return
+            
+            self.logger.info(f"[ASYNC] Processing article: {article_id}")
+            
+            # Fetch article from Supabase
+            article = await self._fetch_article_from_supabase(article_id)
+            
+            if not article:
+                self._send_slack_update(response_url, {
+                    "text": f"❌ Article not found: {article_id}",
+                    "replace_original": False
+                })
+                return
+            
+            # Check if already in Airtable
+            existing = self.airtable.search_by_supabase_id(article_id)
+            if existing:
+                self._send_slack_update(response_url, {
+                    "text": f"✅ Already in pipeline: *{article['title']}*",
+                    "replace_original": False
+                })
+                return
+            
+            # Scrape full article text (this is the slow part)
+            self.logger.info(f"[ASYNC] Scraping: {article['url']}")
+            scrape_result = await self.scraper.scrape_article(article['url'])
+            
+            # Prepare and push to Airtable
+            airtable_data = self._prepare_airtable_data(article, scrape_result)
+            record_id = self.airtable.create_article_record(airtable_data)
+            
+            if record_id:
+                self.logger.info(f"[ASYNC] ✓ Added to Airtable: {record_id}")
+                
+                # Send success update
+                self._send_slack_update(response_url, {
+                    "text": f"✅ *Added to Pipeline!*\n\n*{article['title']}*\n\n"
+                           f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
+                           f"🔗 <{article['url']}|View Original>\n"
+                           f"📋 Check Airtable: Content Pipeline",
+                    "replace_original": False
+                })
+            else:
+                self._send_slack_update(response_url, {
+                    "text": f"❌ Failed to add to Airtable: {article['title']}",
+                    "replace_original": False
+                })
+                
+        except Exception as e:
+            self.logger.error(f"[ASYNC] Error: {e}", exc_info=True)
+            self._send_slack_update(response_url, {
+                "text": f"❌ Error adding to pipeline: {str(e)}",
+                "replace_original": False
+            })
+    
+    def _send_slack_update(self, response_url: str, message: Dict[str, Any]):
+        """Send update to Slack via response_url"""
+        try:
+            response = requests.post(response_url, json=message, timeout=5)
+            if response.status_code != 200:
+                self.logger.error(f"Failed to send Slack update: {response.status_code}")
+        except Exception as e:
+            self.logger.error(f"Error sending Slack update: {e}")
     
     async def handle_add_to_pipeline(
         self,
