@@ -1,0 +1,28 @@
+#!/bin/bash
+# Quick script to check if Slack is sending requests to Railway
+# Run this WHILE you're trying to save the URL in Slack settings
+
+echo "🔍 Checking Railway logs for Slack requests..."
+echo "================================================"
+echo ""
+echo "This script would check Railway logs, but you need to:"
+echo ""
+echo "1. Open Railway dashboard: https://railway.app"
+echo "2. Go to your project: ai-newsletter-pipeline"
+echo "3. Click on your service"
+echo "4. Click 'Deploy Logs' tab"
+echo "5. Keep this window open"
+echo ""
+echo "Then, in another window:"
+echo "6. Go to https://api.slack.com/apps"
+echo "7. Click your app"
+echo "8. Go to 'Interactivity & Shortcuts'"
+echo "9. Enter URL: https://ai-newsletter-pipeline-production.up.railway.app/slack/interactions"
+echo "10. Click 'Save Changes'"
+echo ""
+echo "Watch the Railway logs window - do you see ANY requests?"
+echo ""
+echo "If YES: Paste the log here and we'll fix the response"
+echo "If NO: The issue is Slack app configuration (not code)"
+echo ""
+echo "================================================"

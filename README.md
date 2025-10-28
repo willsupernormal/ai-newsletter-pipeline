@@ -1,33 +1,61 @@
 # AI Newsletter Pipeline
 
-Automated content collection and AI-powered daily digest system for business AI newsletters. Built with async Python, Supabase, and Claude MCP integration.
+> Automated daily AI news digest with intelligent filtering, Slack integration, and Airtable content pipeline.
 
-## Features
+**Status:** ✅ Operational | **Last Updated:** October 28, 2025
 
-- **Daily Automated Scraping**: RSS feeds, Twitter accounts, and Gmail newsletters
-- **Multi-Stage AI Processing**: Two-stage OpenAI filtering for optimal content selection
-- **Daily Digest Generation**: AI creates comprehensive daily summaries with key insights
-- **Weekly Content Organization**: Boss sees current week's content with daily breakdowns
-- **Claude MCP Integration**: Natural language database interaction for curation
-- **Smart Duplicate Detection**: Advanced deduplication across all sources
-- **GitHub Actions Automation**: Runs daily at 7 AM UTC
-- **Source Performance Analytics**: Track which sources deliver best content
-- **Enhanced Database Schema**: Optimized for MCP queries and boss interaction
+## ✨ Features
 
-## Architecture
+### Core Functionality
+- **31 RSS Sources**: Enterprise AI, Open Source, Tech News
+- **Multi-Stage AI Filtering**: GPT-4 selects top 5 from 180+ articles
+- **Daily Slack Digest**: Posted at 7 AM AEST with summaries
+- **Interactive Buttons**: "Add to Pipeline" button in Slack
+- **Airtable Integration**: One-click article addition to content pipeline
+- **Smart Deduplication**: Prevents duplicate content
+- **GitHub Actions**: Fully automated daily runs
+
+### Recent Improvements
+- ✅ Async button processing (no more timeouts)
+- ✅ Visual button feedback (Processing → Added)
+- ✅ 17 new premium sources added
+- ✅ Browser headers for better scraping
+- ✅ Brotli compression support
+
+## 🏗️ Architecture
 
 ```
-Daily Pipeline (GitHub Actions 7 AM UTC)
-├── Multi-Source Scraping
-│   ├── RSS Feeds → Business AI sources
-│   ├── Twitter Accounts → Key influencers  
-│   └── Gmail Newsletter Tag → Parse "newsletter" tagged emails
-├── Content Processing
-│   ├── Deduplication → Remove duplicates across sources
-│   ├── Content Cleaning → Extract and format text
-│   └── Multi-Stage AI Filtering
-│       ├── Stage 1: Relevance filtering (top 15 from all articles)
-│       └── Stage 2: Final selection (top 5 with summaries)
+┌─────────────────────────────────────────────────────────────┐
+│                    DAILY DIGEST FLOW                        │
+└─────────────────────────────────────────────────────────────┘
+
+1. GitHub Actions (7 AM AEST)
+   ↓
+2. Scrape 31 RSS Feeds → ~180 articles
+   ↓
+3. Stage 1 AI Filter → Top 10 articles
+   ↓
+4. Stage 2 AI Filter → Top 5 articles
+   ↓
+5. Post to Slack with buttons
+   ↓
+6. Store in Supabase
+
+┌─────────────────────────────────────────────────────────────┐
+│                  BUTTON CLICK FLOW                          │
+└─────────────────────────────────────────────────────────────┘
+
+1. User clicks "Add to Pipeline" in Slack
+   ↓
+2. Slack → Railway Webhook Server
+   ↓
+3. Button changes to "Processing..." (instant)
+   ↓
+4. Background: Fetch from Supabase → Scrape full article → Push to Airtable
+   ↓
+5. Button changes to "✅ Added" (3-4 seconds)
+   ↓
+6. Article appears in Airtable
 └── Daily Digest Creation
     ├── AI-Generated Summary → Key themes and insights
     ├── Selected Articles → Top 5 with enhanced descriptions

@@ -172,8 +172,7 @@ async def add_source(db_client, name: str, url: str, category: str = None):
             'active': True
         }
         
-        if category:
-            data['category'] = category
+        # Note: category field not used (doesn't exist in DB schema)
         
         result = db_client.client.table('content_sources').insert(data).execute()
         
@@ -253,19 +252,9 @@ async def show_summary(db_client):
         sources = result.data
         print(f"\n✅ Total active RSS sources: {len(sources)}")
         
-        # Group by category
-        categories = {}
-        for source in sources:
-            cat = source.get('category', 'General')
-            if cat not in categories:
-                categories[cat] = []
-            categories[cat].append(source['name'])
-        
-        print("\n📂 By Category:")
-        for cat, names in sorted(categories.items()):
-            print(f"\n  {cat} ({len(names)} sources):")
-            for name in sorted(names):
-                print(f"    • {name}")
+        print("\n📂 All Sources:")
+        for source in sorted(sources, key=lambda x: x['name']):
+            print(f"  • {source['name']}")
                 
     except Exception as e:
         print(f"❌ Error getting summary: {e}")

@@ -1,6 +1,5 @@
-# Slack App Manifest for AI Digest Manager
-# Use this to create a new app with correct configuration
-# Go to: https://api.slack.com/apps → Create New App → From an app manifest
+# Minimal Slack App Manifest - Only What's Needed for Interactive Buttons
+# This version has NO errors and only includes required features
 
 display_information:
   name: AI Digest Manager
@@ -19,8 +18,6 @@ oauth_config:
     bot:
       - chat:write
       - chat:write.public
-      - incoming-webhook
-      - channels:history
 
 settings:
   interactivity:
@@ -28,16 +25,19 @@ settings:
     request_url: https://ai-newsletter-pipeline-production.up.railway.app/slack/interactions
   org_deploy_enabled: false
   socket_mode_enabled: false
-  token_rotation_enabled: false
 
 # Instructions:
 # 1. Go to https://api.slack.com/apps
 # 2. Click "Create New App"
 # 3. Choose "From an app manifest"
-# 4. Select your workspace
-# 5. Paste this YAML content
-# 6. Review and create
-# 7. Install to workspace
-# 8. Copy Bot User OAuth Token to .env as SLACK_BOT_TOKEN
-# 9. Copy Signing Secret to .env as SLACK_SIGNING_SECRET
-# 10. Test buttons!
+# 4. Select your workspace: Supernormal Systems
+# 5. Copy and paste this ENTIRE file
+# 6. Click "Next" → "Create"
+# 7. Click "Install to Workspace" → "Allow"
+# 8. Go to "OAuth & Permissions" → Copy "Bot User OAuth Token"
+# 9. Go to "Basic Information" → Copy "Signing Secret"
+# 10. Update your .env file:
+#     SLACK_BOT_TOKEN=xoxb-[paste-token-here]
+#     SLACK_SIGNING_SECRET=[paste-secret-here]
+# 11. Update Railway environment variables with same values
+# 12. Test buttons - they should work now!

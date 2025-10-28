@@ -14,6 +14,7 @@ requests>=2.31.0
 aiofiles>=23.2.0
 newspaper3k>=0.2.8  # Full article extraction
 trafilatura>=1.6.0  # Alternative article extraction
+brotli>=1.1.0  # Compression support for RSS feeds
 
 # Phase 2: Interactive features
 fastapi>=0.104.0  # Webhook server
