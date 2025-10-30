@@ -4,6 +4,7 @@ Receives button clicks and routes to handler
 """
 
 import logging
+import asyncio
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse
 import json
@@ -198,11 +199,24 @@ async def slack_interactions(request: Request):
         user = payload.get('user', {}).get('username', 'unknown')
         logger.info(f"Received {action_type} from {user}")
         
-        # Handle interaction
-        response_data = await webhook_handler.handle_interaction(payload)
-        
-        # Return response to Slack
-        return JSONResponse(content=response_data)
+        # Handle modal submissions differently
+        if action_type == 'view_submission':
+            # Modal was submitted - process in background
+            response_url = payload.get('response_url')
+            asyncio.create_task(
+                webhook_handler._process_add_to_pipeline_async(
+                    payload, 
+                    user.get('id', ''),
+                    user.get('username', 'unknown'),
+                    response_url
+                )
+            )
+            # Close modal immediately
+            return JSONResponse(content={"response_action": "clear"})
+        else:
+            # Handle regular button interactions
+            response_data = await webhook_handler.handle_interaction(payload)
+            return JSONResponse(content=response_data)
         
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON payload: {e}")

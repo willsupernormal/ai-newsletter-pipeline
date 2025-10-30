@@ -69,6 +69,96 @@ class SlackWebhookHandler:
             self.logger.error(f"Error verifying Slack signature: {e}")
             return False
     
+    def _open_pipeline_modal(self, trigger_id: str, article_id: str):
+        """Open modal for user to select theme, content type, and angle"""
+        modal_view = {
+            "type": "modal",
+            "callback_id": "pipeline_modal",
+            "private_metadata": article_id,  # Store article ID
+            "title": {"type": "plain_text", "text": "Add to Pipeline"},
+            "submit": {"type": "plain_text", "text": "Submit"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "*Customize article metadata (all optional)*"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "theme_block",
+                    "optional": True,
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "theme_select",
+                        "placeholder": {"type": "plain_text", "text": "Select a theme"},
+                        "options": [
+                            {"text": {"type": "plain_text", "text": "AI Governance"}, "value": "AI Governance"},
+                            {"text": {"type": "plain_text", "text": "Vendor Lock-in"}, "value": "Vendor Lock-in"},
+                            {"text": {"type": "plain_text", "text": "Data Strategy"}, "value": "Data Strategy"},
+                            {"text": {"type": "plain_text", "text": "Enterprise Adoption"}, "value": "Enterprise Adoption"},
+                            {"text": {"type": "plain_text", "text": "Model Performance"}, "value": "Model Performance"},
+                            {"text": {"type": "plain_text", "text": "Regulatory Compliance"}, "value": "Regulatory Compliance"},
+                            {"text": {"type": "plain_text", "text": "Technical Innovation"}, "value": "Technical Innovation"},
+                            {"text": {"type": "plain_text", "text": "Business Strategy"}, "value": "Business Strategy"},
+                            {"text": {"type": "plain_text", "text": "Ethics & Safety"}, "value": "Ethics & Safety"},
+                            {"text": {"type": "plain_text", "text": "Market Trends"}, "value": "Market Trends"}
+                        ]
+                    },
+                    "label": {"type": "plain_text", "text": "Theme"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "content_type_block",
+                    "optional": True,
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "content_type_select",
+                        "placeholder": {"type": "plain_text", "text": "Select content type"},
+                        "options": [
+                            {"text": {"type": "plain_text", "text": "News"}, "value": "News"},
+                            {"text": {"type": "plain_text", "text": "Research"}, "value": "Research"},
+                            {"text": {"type": "plain_text", "text": "Opinion"}, "value": "Opinion"},
+                            {"text": {"type": "plain_text", "text": "Analysis"}, "value": "Analysis"},
+                            {"text": {"type": "plain_text", "text": "Case Study"}, "value": "Case Study"},
+                            {"text": {"type": "plain_text", "text": "Tutorial"}, "value": "Tutorial"}
+                        ]
+                    },
+                    "label": {"type": "plain_text", "text": "Content Type"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "angle_block",
+                    "optional": True,
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "angle_input",
+                        "multiline": True,
+                        "placeholder": {"type": "plain_text", "text": "Enter your angle or perspective..."}
+                    },
+                    "label": {"type": "plain_text", "text": "Your Angle"}
+                }
+            ]
+        }
+        
+        # Call Slack API to open modal
+        try:
+            response = requests.post(
+                "https://slack.com/api/views.open",
+                headers={
+                    "Authorization": f"Bearer {self.settings.SLACK_BOT_TOKEN}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "trigger_id": trigger_id,
+                    "view": modal_view
+                }
+            )
+            result = response.json()
+            if not result.get('ok'):
+                self.logger.error(f"Failed to open modal: {result.get('error')}")
+        except Exception as e:
+            self.logger.error(f"Error opening modal: {e}")
+    
     async def handle_interaction(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Main handler for Slack interactions
@@ -91,25 +181,29 @@ class SlackWebhookHandler:
             
             # Route to appropriate handler
             if action_id == 'add_to_pipeline':
-                # Start background task
+                # Open modal for user to select theme, content type, and angle
+                article_id = payload.get('actions', [{}])[0].get('value')
+                trigger_id = payload.get('trigger_id')
+                
+                if not trigger_id:
+                    return {"text": "❌ Missing trigger_id"}
+                
+                # Open modal
+                self._open_pipeline_modal(trigger_id, article_id)
+                
+                # Return empty response (modal will handle the rest)
+                return {}
+            
+            elif action_id == 'submit_to_pipeline':
+                # This is the modal submission - process it
                 asyncio.create_task(
                     self._process_add_to_pipeline_async(
                         payload, user_id, user_name, response_url
                     )
                 )
                 
-                # Return immediate acknowledgment with button update
-                # Get the original message blocks and update the clicked button
-                original_message = payload.get('message', {})
-                updated_blocks = self._update_button_to_processing(
-                    original_message.get('blocks', []),
-                    payload.get('actions', [{}])[0].get('block_id')
-                )
-                
                 return {
-                    "text": "⏳ Processing... Adding article to pipeline",
-                    "blocks": updated_blocks,
-                    "replace_original": True  # Replace to update button
+                    "text": "⏳ Processing... Adding article to pipeline"
                 }
             else:
                 self.logger.warning(f"Unknown action_id: {action_id}")
@@ -138,8 +232,28 @@ class SlackWebhookHandler:
         This runs asynchronously after returning immediate response to Slack
         """
         try:
-            # Extract article ID
-            article_id = payload.get('actions', [{}])[0].get('value')
+            # Extract article ID and modal values
+            is_modal_submission = payload.get('type') == 'view_submission'
+            
+            if is_modal_submission:
+                # This is a modal submission
+                article_id = payload.get('view', {}).get('private_metadata')
+                values = payload.get('view', {}).get('state', {}).get('values', {})
+                
+                # Extract theme, content type, and angle
+                theme = values.get('theme_block', {}).get('theme_select', {}).get('selected_option', {}).get('value')
+                content_type = values.get('content_type_block', {}).get('content_type_select', {}).get('selected_option', {}).get('value')
+                angle = values.get('angle_block', {}).get('angle_input', {}).get('value')
+                
+                # For modal submissions, we'll post to channel instead of using response_url
+                channel_id = None  # Will be extracted from article context
+            else:
+                # Direct button click (old flow)
+                article_id = payload.get('actions', [{}])[0].get('value')
+                theme = None
+                content_type = None
+                angle = None
+                is_modal_submission = False
             
             if not article_id:
                 self._send_slack_update(response_url, {
@@ -197,15 +311,27 @@ class SlackWebhookHandler:
                     payload.get('actions', [{}])[0].get('block_id')
                 )
                 
-                # Send success update with updated button
-                self._send_slack_update(response_url, {
-                    "text": f"✅ *Added to Pipeline!*\n\n*{article['title']}*\n\n"
-                           f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
-                           f"🔗 <{article['url']}|View Original>\n"
-                           f"📋 Check Airtable: Content Pipeline",
-                    "blocks": success_blocks,
-                    "replace_original": True
-                })
+                # Send success update
+                if is_modal_submission:
+                    # For modal submissions, post a new message to the channel
+                    self._post_to_channel(
+                        f"✅ *Added to Pipeline!*\n\n*{article['title']}*\n\n"
+                        f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
+                        f"{f'🎯 Theme: {theme}' if theme else ''}\n"
+                        f"{f'📝 Type: {content_type}' if content_type else ''}\n"
+                        f"🔗 <{article['url']}|View Original>\n"
+                        f"📋 Check Airtable: Content Pipeline"
+                    )
+                else:
+                    # For button clicks, update the original message
+                    self._send_slack_update(response_url, {
+                        "text": f"✅ *Added to Pipeline!*\n\n*{article['title']}*\n\n"
+                               f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
+                               f"🔗 <{article['url']}|View Original>\n"
+                               f"📋 Check Airtable: Content Pipeline",
+                        "blocks": success_blocks,
+                        "replace_original": True
+                    })
             else:
                 self._send_slack_update(response_url, {
                     "text": f"❌ Failed to add to Airtable: {article['title']}",
@@ -227,6 +353,27 @@ class SlackWebhookHandler:
                 self.logger.error(f"Failed to send Slack update: {response.status_code}")
         except Exception as e:
             self.logger.error(f"Error sending Slack update: {e}")
+    
+    def _post_to_channel(self, text: str, channel: str = "C09NLCBCMCZ"):
+        """Post a message to a Slack channel"""
+        try:
+            response = requests.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={
+                    "Authorization": f"Bearer {self.settings.SLACK_BOT_TOKEN}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "channel": channel,
+                    "text": text,
+                    "mrkdwn": True
+                }
+            )
+            result = response.json()
+            if not result.get('ok'):
+                self.logger.error(f"Failed to post to channel: {result.get('error')}")
+        except Exception as e:
+            self.logger.error(f"Error posting to channel: {e}")
     
     def _update_button_to_processing(self, blocks: list, clicked_block_id: str) -> list:
         """
@@ -424,6 +571,11 @@ class SlackWebhookHandler:
             'digest_date': digest_date,
             'stage': '📥 Saved',
             'priority': '🟡 Medium',
+            
+            # User-selected metadata from modal
+            'theme': theme if theme else None,
+            'content_type': content_type if content_type else None,
+            'your_angle': angle if angle else None,
             
             # AI-generated analysis (from digest_articles table)
             'detailed_summary': article.get('detailed_summary', ''),

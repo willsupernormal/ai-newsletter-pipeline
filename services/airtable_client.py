@@ -164,6 +164,16 @@ class AirtableClient:
         # Priority (default to Medium)
         fields['Priority'] = article_data.get('priority', '🟡 Medium')
         
+        # User-selected metadata from modal
+        if 'theme' in article_data and article_data['theme']:
+            fields['Theme'] = article_data['theme']
+        
+        if 'content_type' in article_data and article_data['content_type']:
+            fields['Content Type'] = article_data['content_type']
+        
+        if 'your_angle' in article_data and article_data['your_angle']:
+            fields['Your Angle'] = article_data['your_angle']
+        
         # AI-generated analysis (from digest_articles table)
         if 'detailed_summary' in article_data and article_data['detailed_summary']:
             fields['Detailed Summary'] = article_data['detailed_summary']
