@@ -196,8 +196,10 @@ async def slack_interactions(request: Request):
         
         # Log interaction
         action_type = payload.get('type', 'unknown')
-        user = payload.get('user', {}).get('username', 'unknown')
-        logger.info(f"Received {action_type} from {user}")
+        user_obj = payload.get('user', {})
+        user_name = user_obj.get('username', 'unknown') if isinstance(user_obj, dict) else 'unknown'
+        user_id = user_obj.get('id', '') if isinstance(user_obj, dict) else ''
+        logger.info(f"Received {action_type} from {user_name}")
         
         # Handle modal submissions differently
         if action_type == 'view_submission':
@@ -206,8 +208,8 @@ async def slack_interactions(request: Request):
             asyncio.create_task(
                 webhook_handler._process_add_to_pipeline_async(
                     payload, 
-                    user.get('id', ''),
-                    user.get('username', 'unknown'),
+                    user_id,
+                    user_name,
                     response_url
                 )
             )
