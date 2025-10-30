@@ -58,13 +58,9 @@ class DigestStorage:
                     
                     # AI-generated fields (from article_summaries JSON structure)
                     'detailed_summary': ai_data.get('detailed_summary', ''),
-                    'business_impact': ai_data.get('business_impact', ''),
-                    'strategic_context': ai_data.get('strategic_context', ''),
+                    'business_impact': ai_data.get('business_impact', ''),  # Includes strategic context
                     'key_quotes': ai_data.get('key_quotes', []),
                     'specific_data': ai_data.get('specific_data', []),
-                    'talking_points': ai_data.get('talking_points', []),
-                    'newsletter_angles': ai_data.get('newsletter_angles', []),
-                    'technical_details': ai_data.get('technical_details', []),
                     'companies_mentioned': ai_data.get('companies_mentioned', [])
                 }
                 

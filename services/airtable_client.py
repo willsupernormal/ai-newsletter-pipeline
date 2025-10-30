@@ -169,25 +169,13 @@ class AirtableClient:
             fields['Detailed Summary'] = article_data['detailed_summary']
         
         if 'business_impact' in article_data and article_data['business_impact']:
-            fields['Business Impact'] = article_data['business_impact']
-        
-        if 'strategic_context' in article_data and article_data['strategic_context']:
-            fields['Strategic Context'] = article_data['strategic_context']
+            fields['Business Impact'] = article_data['business_impact']  # Includes strategic context
         
         if 'key_quotes' in article_data:
             fields['Key Quotes'] = self._format_quotes(article_data['key_quotes'])
         
         if 'specific_data' in article_data:
             fields['Specific Data'] = self._format_metrics(article_data['specific_data'])
-        
-        if 'talking_points' in article_data and article_data['talking_points']:
-            fields['Talking Points'] = '\n'.join(article_data['talking_points'])
-        
-        if 'newsletter_angles' in article_data and article_data['newsletter_angles']:
-            fields['Newsletter Angles'] = '\n'.join(article_data['newsletter_angles'])
-        
-        if 'technical_details' in article_data and article_data['technical_details']:
-            fields['Technical Details'] = '\n'.join(article_data['technical_details'])
         
         if 'companies_mentioned' in article_data and article_data['companies_mentioned']:
             fields['Companies Mentioned'] = ', '.join(article_data['companies_mentioned'])
