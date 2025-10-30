@@ -77,16 +77,8 @@ async def run_ai_digest_pipeline(target_date: date = None, force: bool = False):
             print("⚠️ AI selected no articles for digest")
             return False
         
-        # Store all articles (selected and non-selected)
-        selected_urls = [article['url'] for article in digest_result['selected_articles']]
-        await digest_storage.store_all_articles(
-            aggregated_content.articles,
-            target_date,
-            selected_urls
-        )
-        
-        # Store daily digest (returns digest_id and articles with IDs)
-        digest_id, articles_with_ids = await digest_storage.store_daily_digest(
+        # Store ONLY the 5 selected articles in digest_articles table with full AI enrichment
+        articles_with_ids = await digest_storage.store_daily_digest(
             digest_date=target_date if isinstance(target_date, date) else datetime.strptime(target_date, '%Y-%m-%d').date(),
             summary_text=digest_result['digest_text'],
             key_insights=digest_result['key_insights'],
@@ -97,7 +89,7 @@ async def run_ai_digest_pipeline(target_date: date = None, force: bool = False):
         )
         
         # Success summary
-        logger.info(f"Daily digest created successfully: {digest_id}")
+        logger.info(f"Stored {len(articles_with_ids)} articles in digest_articles table")
         
         print(f"\n🎉 AI Daily Digest Created for {target_date}")
         print(f"📊 Processing Summary:")
@@ -106,7 +98,7 @@ async def run_ai_digest_pipeline(target_date: date = None, force: bool = False):
         print(f"    - Twitter articles: {aggregated_content.twitter_count}")
         print(f"  • Stage 1 filtering: {digest_result['total_processed']} → {digest_result['stage_1_count']}")
         print(f"  • Stage 2 final selection: {digest_result['stage_1_count']} → {digest_result['final_count']}")
-        print(f"  • Digest ID: {digest_id}")
+        print(f"  • Stored in digest_articles: {len(articles_with_ids)} articles")
         
         print(f"\n📰 Selected Articles:")
         for i, article in enumerate(articles_with_ids, 1):
@@ -132,6 +124,8 @@ async def run_ai_digest_pipeline(target_date: date = None, force: bool = False):
             )
             
             if slack_success:
+                # Mark articles as posted to Slack
+                await digest_storage.mark_posted_to_slack([a['id'] for a in articles_with_ids])
                 logger.info("✅ Successfully posted digest to Slack")
                 print("\n📱 Posted to Slack: #ai-daily-digest")
             else:

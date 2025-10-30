@@ -14,6 +14,7 @@ from datetime import datetime
 
 from config.settings import Settings
 from database.supabase_simple import SimpleSupabaseClient
+from database.digest_storage import DigestStorage
 from services.airtable_client import AirtableClient
 from scrapers.article_scraper import ArticleScraper
 
@@ -25,6 +26,7 @@ class SlackWebhookHandler:
         self.settings = settings
         self.logger = logging.getLogger(__name__)
         self.supabase = SimpleSupabaseClient(settings)
+        self.digest_storage = DigestStorage(settings)
         self.airtable = AirtableClient(settings)
         self.scraper = ArticleScraper()
         
@@ -184,6 +186,9 @@ class SlackWebhookHandler:
             
             if record_id:
                 self.logger.info(f"[ASYNC] ✓ Added to Airtable: {record_id}")
+                
+                # Mark article as added to Airtable in digest_articles table
+                await self.digest_storage.mark_added_to_airtable(article_id, record_id)
                 
                 # Update button to show success
                 original_message = payload.get('message', {})
@@ -366,7 +371,7 @@ class SlackWebhookHandler:
     
     async def _fetch_article_from_supabase(self, article_id: str) -> Optional[Dict[str, Any]]:
         """
-        Fetch article from Supabase by ID
+        Fetch article from digest_articles table by ID
         
         Args:
             article_id: Article UUID
@@ -375,7 +380,7 @@ class SlackWebhookHandler:
             Article dict or None
         """
         try:
-            response = self.supabase.client.table('articles')\
+            response = self.supabase.client.table('digest_articles')\
                 .select('*')\
                 .eq('id', article_id)\
                 .execute()
@@ -383,11 +388,11 @@ class SlackWebhookHandler:
             if response.data and len(response.data) > 0:
                 return response.data[0]
             
-            self.logger.warning(f"Article not found in Supabase: {article_id}")
+            self.logger.warning(f"Article not found in digest_articles: {article_id}")
             return None
             
         except Exception as e:
-            self.logger.error(f"Error fetching article from Supabase: {e}")
+            self.logger.error(f"Error fetching article from digest_articles: {e}")
             return None
     
     def _prepare_airtable_data(
@@ -406,7 +411,7 @@ class SlackWebhookHandler:
             Formatted data dict for Airtable
         """
         # Get digest date from article
-        digest_date = article.get('week_start_date')
+        digest_date = article.get('digest_date')
         if not digest_date:
             # Fallback to scraped_at or today
             digest_date = article.get('scraped_at', datetime.now().date().isoformat())
@@ -420,14 +425,16 @@ class SlackWebhookHandler:
             'stage': '📥 Saved',
             'priority': '🟡 Medium',
             
-            # AI-generated context (from digest)
-            'ai_summary_short': article.get('ai_summary_short', ''),
-            'ai_summary': article.get('ai_summary', ''),
-            'key_metrics': article.get('key_metrics', []),
+            # AI-generated analysis (from digest_articles table)
+            'detailed_summary': article.get('detailed_summary', ''),
+            'business_impact': article.get('business_impact', ''),
+            'strategic_context': article.get('strategic_context', ''),
             'key_quotes': article.get('key_quotes', []),
-            'why_it_matters': article.get('why_it_matters', ''),
-            'primary_theme': article.get('primary_theme', ''),
-            'content_type': article.get('content_type', 'news'),
+            'specific_data': article.get('specific_data', []),
+            'talking_points': article.get('talking_points', []),
+            'newsletter_angles': article.get('newsletter_angles', []),
+            'technical_details': article.get('technical_details', []),
+            'companies_mentioned': article.get('companies_mentioned', []),
             
             # Scraped content
             'full_article_text': scrape_result.get('full_text', ''),

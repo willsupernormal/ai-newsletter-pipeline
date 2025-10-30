@@ -26,118 +26,68 @@ class DigestStorage:
         total_processed: int,
         ai_reasoning: str = "",
         article_summaries: List[Dict[str, Any]] = None
-    ) -> Tuple[str, List[Dict[str, Any]]]:
+    ) -> List[Dict[str, Any]]:
         """
-        Store daily digest and return digest ID + articles with IDs
+        Store selected articles in digest_articles table with full AI enrichment
         
         Returns:
-            tuple: (digest_id, articles_with_ids)
+            articles_with_ids: List of articles with database IDs
         """
         
         try:
-            # First, store all articles (both selected and non-selected)
-            article_ids = []
             articles_with_ids = []
-            for article in selected_articles:
-                # Add digest metadata and convert datetime objects
+            
+            for i, article in enumerate(selected_articles):
+                # Get corresponding AI analysis from article_summaries
+                ai_data = article_summaries[i] if article_summaries and i < len(article_summaries) else {}
+                
+                # Prepare data for digest_articles table
                 article_data = {
+                    # Basic fields
                     'title': article['title'],
-                    'content_excerpt': article.get('content_excerpt', ''),
                     'url': article['url'],
                     'source_name': article['source_name'],
                     'source_type': article['source_type'],
                     'published_at': article.get('published_date'),
-                    'week_start_date': self._get_week_start(digest_date).isoformat(),
-                    'tags': article.get('tags', []),
-                    'key_themes': article.get('key_themes', []),
-                    'relevance_score': article.get('relevance_score', 60.0),
-                    'business_impact_score': article.get('business_impact_score', 55.0),
-                    'selected_for_digest': True,
-                    'selected_for_newsletter': False,
                     'scraped_at': datetime.now().isoformat(),
+                    'digest_date': digest_date.isoformat() if hasattr(digest_date, 'isoformat') else str(digest_date),
                     
-                    # Enhanced context fields (NEW)
-                    'ai_summary': article.get('ai_summary', ''),
-                    'ai_summary_short': article.get('ai_summary_short', ''),
-                    'key_quotes': article.get('key_quotes', []),
-                    'key_metrics': article.get('key_metrics', []),
-                    'why_it_matters': article.get('why_it_matters', ''),
-                    'primary_theme': article.get('primary_theme', ''),
-                    'content_type': article.get('content_type', 'news')
+                    # Slack/Airtable tracking
+                    'posted_to_slack': False,
+                    'added_to_airtable': False,
+                    
+                    # AI-generated fields (from article_summaries JSON structure)
+                    'detailed_summary': ai_data.get('detailed_summary', ''),
+                    'business_impact': ai_data.get('business_impact', ''),
+                    'strategic_context': ai_data.get('strategic_context', ''),
+                    'key_quotes': ai_data.get('key_quotes', []),
+                    'specific_data': ai_data.get('specific_data', []),
+                    'talking_points': ai_data.get('talking_points', []),
+                    'newsletter_angles': ai_data.get('newsletter_angles', []),
+                    'technical_details': ai_data.get('technical_details', []),
+                    'companies_mentioned': ai_data.get('companies_mentioned', [])
                 }
                 
-                # Add Twitter-specific fields if present
-                if article.get('source_type') == 'twitter':
-                    article_data['twitter_metrics'] = article.get('twitter_metrics', {})
+                # Insert into digest_articles table (upsert to handle duplicates)
+                response = self.db_client.client.table('digest_articles')\
+                    .upsert(article_data, on_conflict='url,digest_date')\
+                    .execute()
                 
-                # Store article and get ID (use upsert to handle duplicates)
-                try:
-                    article_id = await self.db_client.insert_article(article_data)
-                    article_ids.append(article_id)
-                    
-                    # Add ID to article for Slack buttons
+                if response.data:
+                    article_id = str(response.data[0]['id'])
                     article_with_id = article.copy()
                     article_with_id['id'] = article_id
                     articles_with_ids.append(article_with_id)
                     
-                except Exception as e:
-                    if 'duplicate key' in str(e):
-                        # Article already exists, find its ID
-                        existing = await self.db_client.get_article_by_url(article_data['url'])
-                        if existing:
-                            article_ids.append(existing['id'])
-                            
-                            # Add ID to article for Slack buttons
-                            article_with_id = article.copy()
-                            article_with_id['id'] = existing['id']
-                            articles_with_ids.append(article_with_id)
-                            
-                            self.logger.debug(f"Using existing article ID for {article_data['url']}")
-                        else:
-                            self.logger.error(f"Could not find existing article for {article_data['url']}")
-                            raise
-                    else:
-                        raise
+                    self.logger.info(f"✓ Stored digest article: {article['title'][:50]}...")
+                else:
+                    self.logger.error(f"Failed to store article: {article['title']}")
             
-            # Create digest record
-            digest_date_str = digest_date.isoformat() if hasattr(digest_date, 'isoformat') else str(digest_date)
-            digest_data = {
-                'digest_date': digest_date_str,
-                'summary_text': summary_text,
-                'key_insights': key_insights,
-                'selected_article_ids': article_ids,
-                'total_articles_processed': total_processed,
-                'ai_reasoning': ai_reasoning,
-                'article_summaries': article_summaries or []
-            }
-            
-            # Check if digest already exists for this date
-            existing_digest = await self.get_daily_digest(digest_date)
-            is_update = existing_digest is not None
-            
-            # Store digest (upsert: insert or update if exists)
-            response = self.db_client.client.table('daily_digests')\
-                .upsert(digest_data, on_conflict='digest_date')\
-                .execute()
-            
-            if response.data:
-                digest_id = str(response.data[0]['id'])
-                
-                # Update articles with digest reference
-                for article_id in article_ids:
-                    self.db_client.client.table('articles')\
-                        .update({'daily_digest_id': digest_id})\
-                        .eq('id', article_id)\
-                        .execute()
-                
-                action = "Updated" if is_update else "Created"
-                self.logger.info(f"{action} daily digest {digest_id} with {len(article_ids)} articles")
-                return digest_id, articles_with_ids
-            
-            raise Exception("Insert returned no data")
+            self.logger.info(f"Stored {len(articles_with_ids)} articles in digest_articles table")
+            return articles_with_ids
             
         except Exception as e:
-            self.logger.error(f"Failed to store daily digest: {e}")
+            self.logger.error(f"Failed to store digest articles: {e}")
             raise
     
     async def get_daily_digest(self, digest_date: date) -> Optional[Dict[str, Any]]:
@@ -170,51 +120,37 @@ class DigestStorage:
             self.logger.error(f"Failed to get digest articles: {e}")
             return []
     
-    async def store_all_articles(
-        self, 
-        articles: List[Dict[str, Any]], 
-        digest_date: date,
-        selected_article_urls: List[str] = None
-    ) -> int:
-        """Store all articles (selected and non-selected) for the day"""
-        
-        if not articles:
-            return 0
-        
-        selected_urls = set(selected_article_urls or [])
-        week_start = self._get_week_start(digest_date)
-        
-        # Prepare articles for storage
-        db_articles = []
-        for article in articles:
-            db_article = {
-                'title': article['title'],
-                'content_excerpt': article.get('content_excerpt', ''),
-                'url': article['url'],
-                'source_name': article['source_name'],
-                'source_type': article['source_type'],
-                'published_at': article.get('published_date'),
-                'week_start_date': week_start.isoformat(),
-                'tags': article.get('tags', []),
-                'key_themes': article.get('key_themes', []),
-                'relevance_score': article.get('relevance_score', 50.0),
-                'business_impact_score': article.get('business_impact_score', 50.0),
-                'selected_for_digest': article['url'] in selected_urls,
-                'selected_for_newsletter': False,
-                'scraped_at': datetime.now().isoformat()
-            }
+    async def mark_posted_to_slack(self, article_ids: List[str], message_ts: str = None):
+        """Mark articles as posted to Slack"""
+        try:
+            for article_id in article_ids:
+                update_data = {'posted_to_slack': True}
+                if message_ts:
+                    update_data['slack_message_ts'] = message_ts
+                
+                self.db_client.client.table('digest_articles')\
+                    .update(update_data)\
+                    .eq('id', article_id)\
+                    .execute()
             
-            # Add Twitter-specific fields
-            if article.get('source_type') == 'twitter':
-                db_article['twitter_metrics'] = article.get('twitter_metrics', {})
+            self.logger.info(f"Marked {len(article_ids)} articles as posted to Slack")
+        except Exception as e:
+            self.logger.error(f"Failed to mark articles as posted: {e}")
+    
+    async def mark_added_to_airtable(self, article_id: str, airtable_record_id: str):
+        """Mark article as added to Airtable"""
+        try:
+            self.db_client.client.table('digest_articles')\
+                .update({
+                    'added_to_airtable': True,
+                    'airtable_record_id': airtable_record_id
+                })\
+                .eq('id', article_id)\
+                .execute()
             
-            db_articles.append(db_article)
-        
-        # Bulk insert
-        stored_count = await self.db_client.bulk_insert_articles(db_articles)
-        self.logger.info(f"Stored {stored_count} articles for {digest_date}")
-        
-        return stored_count
+            self.logger.info(f"Marked article {article_id} as added to Airtable: {airtable_record_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to mark article as added to Airtable: {e}")
     
     def _get_week_start(self, target_date) -> date:
         """Get the Monday of the week containing the target date"""
