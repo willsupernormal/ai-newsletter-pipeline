@@ -245,8 +245,8 @@ class SlackWebhookHandler:
                 content_type = values.get('content_type_block', {}).get('content_type_select', {}).get('selected_option', {}).get('value')
                 angle = values.get('angle_block', {}).get('angle_input', {}).get('value')
                 
-                # For modal submissions, we'll post to channel instead of using response_url
-                channel_id = None  # Will be extracted from article context
+                # For modal submissions, use the default channel (ai-daily-digest)
+                channel_id = "C09NLCBCMCZ"
             else:
                 # Direct button click (old flow)
                 article_id = payload.get('actions', [{}])[0].get('value')
@@ -320,7 +320,8 @@ class SlackWebhookHandler:
                         f"{f'🎯 Theme: {theme}' if theme else ''}\n"
                         f"{f'📝 Type: {content_type}' if content_type else ''}\n"
                         f"🔗 <{article['url']}|View Original>\n"
-                        f"📋 Check Airtable: Content Pipeline"
+                        f"📋 Check Airtable: Content Pipeline",
+                        channel=channel_id
                     )
                 else:
                     # For button clicks, update the original message
