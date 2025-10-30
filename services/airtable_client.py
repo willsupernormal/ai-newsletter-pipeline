@@ -213,8 +213,16 @@ class AirtableClient:
         if not metrics:
             return ""
         
+        # Handle if metrics is not a list (e.g., None, string, etc.)
+        if not isinstance(metrics, list):
+            return ""
+        
         formatted = []
         for i, metric in enumerate(metrics, 1):
+            # Skip if metric is not a dict
+            if not isinstance(metric, dict):
+                continue
+                
             metric_name = metric.get('metric', 'Metric')
             value = metric.get('value', 'N/A')
             context = metric.get('context', '')
@@ -230,8 +238,16 @@ class AirtableClient:
         if not quotes:
             return ""
         
+        # Handle if quotes is not a list (e.g., None, string, etc.)
+        if not isinstance(quotes, list):
+            return ""
+        
         formatted = []
         for i, quote in enumerate(quotes, 1):
+            # Skip if quote is not a dict
+            if not isinstance(quote, dict):
+                continue
+                
             quote_text = quote.get('quote', '')
             speaker = quote.get('speaker', '')
             context = quote.get('context', '')
