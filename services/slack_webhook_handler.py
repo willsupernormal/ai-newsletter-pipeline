@@ -295,7 +295,7 @@ class SlackWebhookHandler:
             scrape_result = await self.scraper.scrape_article(article['url'])
             
             # Prepare and push to Airtable
-            airtable_data = self._prepare_airtable_data(article, scrape_result)
+            airtable_data = self._prepare_airtable_data(article, scrape_result, theme, content_type, angle)
             record_id = self.airtable.create_article_record(airtable_data)
             
             if record_id:
@@ -543,9 +543,12 @@ class SlackWebhookHandler:
             return None
     
     def _prepare_airtable_data(
-        self,
-        article: Dict[str, Any],
-        scrape_result: Dict[str, Any]
+        self, 
+        article: Dict[str, Any], 
+        scrape_result: Dict[str, Any],
+        theme: Optional[str] = None,
+        content_type: Optional[str] = None,
+        angle: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Prepare article data for Airtable
@@ -553,6 +556,9 @@ class SlackWebhookHandler:
         Args:
             article: Article from Supabase
             scrape_result: Result from article scraper
+            theme: User-selected theme (optional)
+            content_type: User-selected content type (optional)
+            angle: User-provided angle (optional)
             
         Returns:
             Formatted data dict for Airtable
