@@ -1,294 +1,457 @@
 # AI Newsletter Pipeline
 
-> Automated daily AI news digest with intelligent filtering, Slack integration, and Airtable content pipeline.
+> **Automated daily AI news digest with intelligent filtering, Slack integration, and Airtable content pipeline**
 
-**Status:** ✅ Operational | **Last Updated:** October 28, 2025
+**Status:** ✅ Production | **Last Updated:** November 4, 2025
 
-## ✨ Features
+---
 
-### Core Functionality
-- **31 RSS Sources**: Enterprise AI, Open Source, Tech News
-- **Multi-Stage AI Filtering**: GPT-4 selects top 5 from 180+ articles
-- **Daily Slack Digest**: Posted at 7 AM AEST with summaries
-- **Interactive Buttons**: "Add to Pipeline" button in Slack
-- **Airtable Integration**: One-click article addition to content pipeline
-- **Smart Deduplication**: Prevents duplicate content
-- **GitHub Actions**: Fully automated daily runs
+## 📋 Table of Contents
 
-### Recent Improvements
-- ✅ Async button processing (no more timeouts)
-- ✅ Visual button feedback (Processing → Added)
-- ✅ 17 new premium sources added
-- ✅ Browser headers for better scraping
-- ✅ Brotli compression support
+- [Overview](#overview)
+- [System Architecture](#system-architecture)
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
+- [File Structure](#file-structure)
 
-## 🏗️ Architecture
+---
+
+## Overview
+
+This system automatically:
+1. **Scrapes** 180+ AI articles daily from 31 RSS feeds
+2. **Filters** to top 5 articles using GPT-4 multi-stage selection
+3. **Posts** digest to Slack with interactive buttons
+4. **Enables** one-click article addition to Airtable content pipeline
+
+### Key Features
+
+- ✅ **Multi-stage AI filtering** - GPT-4 selects best 5 from 180+ articles
+- ✅ **5 AI-generated fields** - Summary, business impact, quotes, data, companies
+- ✅ **Interactive Slack modal** - Select theme, content type, and angle
+- ✅ **Airtable integration** - One-click article addition with full metadata
+- ✅ **Railway webhook server** - Handles Slack button clicks in production
+- ✅ **Supabase storage** - Central database for articles and AI data
+
+---
+
+## System Architecture
+
+### Components
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    DAILY DIGEST FLOW                        │
-└─────────────────────────────────────────────────────────────┘
-
-1. GitHub Actions (7 AM AEST)
-   ↓
-2. Scrape 31 RSS Feeds → ~180 articles
-   ↓
-3. Stage 1 AI Filter → Top 10 articles
-   ↓
-4. Stage 2 AI Filter → Top 5 articles
-   ↓
-5. Post to Slack with buttons
-   ↓
-6. Store in Supabase
-
-┌─────────────────────────────────────────────────────────────┐
-│                  BUTTON CLICK FLOW                          │
-└─────────────────────────────────────────────────────────────┘
-
-1. User clicks "Add to Pipeline" in Slack
-   ↓
-2. Slack → Railway Webhook Server
-   ↓
-3. Button changes to "Processing..." (instant)
-   ↓
-4. Background: Fetch from Supabase → Scrape full article → Push to Airtable
-   ↓
-5. Button changes to "✅ Added" (3-4 seconds)
-   ↓
-6. Article appears in Airtable
-└── Daily Digest Creation
-    ├── AI-Generated Summary → Key themes and insights
-    ├── Selected Articles → Top 5 with enhanced descriptions
-    └── Database Storage → daily_digests table with article references
-
-Boss Interaction (Anytime via Claude MCP)
-├── Daily Digest Review → "Show me today's digest"
-├── Weekly Overview → "What are this week's top themes?"
-├── Targeted Queries → "Find vendor lock-in articles from this week"
-├── Article Selection → "Mark articles 1,3,5 as newsletter-ready"
-└── Performance Analysis → "Which sources performed best this week?"
+┌──────────────────────────────────────────────────────────────┐
+│                    1. LOCAL MACHINE                          │
+│                  (Digest Generation)                         │
+├──────────────────────────────────────────────────────────────┤
+│  • Scrapes 180 articles from 31 RSS feeds                   │
+│  • AI Stage 1: Filter to 18 articles                        │
+│  • AI Stage 2: Select 5 + generate AI fields                │
+│  • Store in Supabase digest_articles table                  │
+│  • Post to Slack with "Add to Pipeline" buttons             │
+└──────────────────────────────────────────────────────────────┘
+                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│                      2. SLACK                                │
+│                  (User Interface)                            │
+├──────────────────────────────────────────────────────────────┤
+│  • User sees 5 articles with buttons                        │
+│  • Clicks "Add to Pipeline"                                 │
+│  • Modal opens with 3 optional fields:                      │
+│    - Theme (10 options)                                     │
+│    - Content Type (6 options)                               │
+│    - Your Angle (free text)                                 │
+└──────────────────────────────────────────────────────────────┘
+                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│                     3. RAILWAY                               │
+│              (Webhook Server - Production)                   │
+├──────────────────────────────────────────────────────────────┤
+│  • Receives button click webhook                            │
+│  • Opens modal for user input                               │
+│  • On submit: Fetches article from Supabase                 │
+│  • Scrapes full article text                                │
+│  • Pushes to Airtable with all fields                       │
+│  • Posts success message to Slack                           │
+└──────────────────────────────────────────────────────────────┘
+                            ↓
+┌──────────────────────────────────────────────────────────────┐
+│                    4. AIRTABLE                               │
+│              (Content Management System)                     │
+├──────────────────────────────────────────────────────────────┤
+│  Article stored with:                                        │
+│  • Basic: Title, URL, Source, Date, Word Count              │
+│  • AI Fields (5): Summary, Impact, Quotes, Data, Companies  │
+│  • User Fields (3): Theme, Content Type, Your Angle         │
+│  • Full Article Text (scraped)                              │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+### Technology Stack
+
+- **Language:** Python 3.11+
+- **AI:** OpenAI GPT-4
+- **Database:** Supabase (PostgreSQL)
+- **Webhook Server:** Railway (FastAPI)
+- **Messaging:** Slack API
+- **CMS:** Airtable
+- **Scraping:** newspaper3k, BeautifulSoup4
+
+---
 
 ## Quick Start
 
-### 1. Environment Setup
+### Prerequisites
+
+- Python 3.11+
+- OpenAI API key
+- Supabase account
+- Slack workspace with bot
+- Airtable account
+- Railway account (for production)
+
+### 1. Clone and Install
 
 ```bash
-# Clone and setup
 git clone <your-repo-url>
 cd ai-newsletter-pipeline
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your API keys and configuration
 ```
 
-### 2. Database Setup
+### 2. Environment Setup
 
-1. Create a new Supabase project at https://supabase.com
-2. Copy your project URL and keys to `.env`
-3. Run the SQL schema in Supabase SQL Editor (see `database/schema.sql`)
-
-### 3. Service Account Setup
-
-**OpenAI**: Get API key from https://platform.openai.com/api-keys
-
-**Twitter Scraping** (choose one):
-- **Apify**: Sign up at https://apify.com, get API token
-- **RapidAPI**: Sign up at https://rapidapi.com, find Twitter API service
-
-**Gmail**: 
-- Enable 2-factor authentication
-- Generate app password for the pipeline
-- Tag newsletters with "newsletter" label
-
-### 4. GitHub Actions Setup
+Create `.env` file:
 
 ```bash
-# Add secrets to your GitHub repository
-gh secret set SUPABASE_URL
-gh secret set SUPABASE_KEY
-gh secret set SUPABASE_SERVICE_KEY
-gh secret set OPENAI_API_KEY
-gh secret set TWITTER_SERVICE  # "apify" or "rapidapi"
-gh secret set APIFY_API_TOKEN   # if using Apify
-gh secret set RAPIDAPI_KEY      # if using RapidAPI
-gh secret set GMAIL_EMAIL
-gh secret set GMAIL_APP_PASSWORD
+# OpenAI
+OPENAI_API_KEY=sk-...
+
+# Supabase
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_KEY=eyJ...
+SUPABASE_SERVICE_KEY=eyJ...
+
+# Slack
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+
+# Airtable
+AIRTABLE_API_KEY=key...
+AIRTABLE_BASE_ID=app...
+
+# Railway (production only)
+WEBHOOK_PORT=8000
 ```
 
-### 5. Boss MCP Configuration
+### 3. Database Setup
 
-Add to Claude Desktop MCP settings:
-
-```json
-{
-  "mcpServers": {
-    "supabase": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-supabase"],
-      "env": {
-        "SUPABASE_URL": "https://your-project.supabase.co",
-        "SUPABASE_SERVICE_ROLE_KEY": "your_service_role_key"
-      }
-    }
-  }
-}
-```
-
-## Usage
-
-### Local Testing
+1. Create Supabase project at https://supabase.com
+2. Run migration in Supabase SQL Editor:
 
 ```bash
-# Enhanced AI digest pipeline (recommended)
-python run_ai_digest_pipeline.py
-
-# Show recent daily digests
-python run_ai_digest_pipeline.py show
-
-# Legacy weekly pipeline
-python main.py --dry-run  # Test run without storing
-python main.py           # Full pipeline execution
-python main.py --cleanup # Clean old content
-
-# RSS-only pipeline for testing
-python run_rss_pipeline.py
-
-# Simple pipeline without AI processing
-python run_simple_pipeline.py
-
-# Test individual components
-python -m scrapers.rss_scraper
-python -m scrapers.twitter_scraper
-python -m scrapers.gmail_scraper
+# Copy contents of database/migrations/create_digest_articles_table.sql
+# Paste into Supabase SQL Editor and run
 ```
 
-### Boss Interaction Workflow
+### 4. Airtable Setup
 
-Once Claude MCP is configured, use natural language queries:
+Create "Content Pipeline" table with these fields:
 
+**Basic Fields:**
+- Title (Single line text)
+- URL (URL)
+- Source (Single line text)
+- Date (Date)
+- Stage (Single select: 📥 Saved, 📝 Writing, ✅ Published)
+- Priority (Single select: 🔴 High, 🟡 Medium, 🟢 Low)
+
+**AI-Generated Fields (5):**
+- Detailed Summary (Long text)
+- Business Impact (Long text)
+- Key Quotes (Long text)
+- Specific Data (Long text)
+- Companies Mentioned (Single line text)
+
+**User-Selected Fields (3):**
+- Theme (Single select: AI Governance, Vendor Lock-in, Data Strategy, etc.)
+- Content Type (Single select: News, Research, Opinion, Analysis, Case Study, Tutorial)
+- Your Angle (Long text)
+
+**Scraped Fields:**
+- Full Article Text (Long text)
+- Word Count (Number)
+
+**Metadata:**
+- Supabase ID (Single line text)
+- Airtable Record ID (Single line text)
+
+### 5. Slack App Setup
+
+1. Create Slack app at https://api.slack.com/apps
+2. Enable **Interactivity**:
+   - Request URL: `https://your-railway-app.up.railway.app/slack/interactions`
+3. Add **Bot Token Scopes**:
+   - `chat:write`
+   - `channels:read`
+   - `im:write`
+4. Install app to workspace
+5. Copy tokens to `.env`
+
+### 6. Railway Deployment
+
+1. Create Railway project at https://railway.app
+2. Connect GitHub repo
+3. Add environment variables (same as `.env`)
+4. Deploy automatically on push to `main`
+
+---
+
+## How It Works
+
+### Daily Digest Generation (Local)
+
+Run manually:
+
+```bash
+# Generate and post digest
+PYTHONPATH=/path/to/project python3 scripts/run_ai_digest_pipeline.py force
+
+# Show recent digests
+PYTHONPATH=/path/to/project python3 scripts/run_ai_digest_pipeline.py show
 ```
-Daily Digest Review:
-"Show me today's daily digest"
-"What were the key insights from yesterday's digest?"
-"Show me the last 3 days of digests"
 
-Weekly Overview:
-"Show me this week's summary stats and top articles"
-"What are the trending themes this week?"
-"Which sources performed best this week?"
+**Process:**
+1. Scrapes 31 RSS feeds → ~180 articles
+2. **Stage 1 AI Filter:** GPT-4 selects top 18 articles
+3. **Stage 2 AI Filter:** GPT-4 selects final 5 + generates:
+   - Detailed summary (400-450 chars)
+   - Business impact (120-170 chars)
+   - Key quotes (JSONB array)
+   - Specific data/metrics (JSONB array)
+   - Companies mentioned (text array)
+4. Stores in Supabase `digest_articles` table
+5. Posts to Slack #ai-daily-digest with buttons
 
-Theme-Based Searching:
-"Find all vendor lock-in articles from this week"
-"Show me data strategy articles with high relevance scores"
-"What AI governance stories do we have?"
+### Button Click Flow (Railway)
 
-Content Selection:
-"Mark articles with IDs abc123, def456 for newsletter"
-"Set article abc123 as priority 1 lead story"
-"Show me all articles selected for newsletter this week"
+**User clicks "Add to Pipeline":**
+1. Railway receives webhook
+2. Opens Slack modal with 3 optional fields:
+   - **Theme:** AI Governance, Vendor Lock-in, Data Strategy, Enterprise Adoption, Model Performance, Regulatory Compliance, Technical Innovation, Business Strategy, Ethics & Safety, Market Trends
+   - **Content Type:** News, Research, Opinion, Analysis, Case Study, Tutorial
+   - **Your Angle:** Free-form text input
+3. User fills fields (all optional) and clicks Submit
+4. Modal closes, processing starts in background
+5. Railway:
+   - Fetches article from Supabase `digest_articles`
+   - Scrapes full article text from original URL
+   - Prepares Airtable data with all fields
+   - Creates Airtable record
+   - Updates Supabase (`added_to_airtable = true`)
+   - Posts success message to Slack channel
 
-Analytics & Performance:
-"Which content sources are delivering the best articles?"
-"Show me relevance score trends over the past month"
-"What topics are we covering most frequently?"
+**Result:** Article appears in Airtable with:
+- 5 AI-generated fields
+- 3 user-selected fields
+- Full article text
+- All metadata
+
+---
+
+## Deployment
+
+### Local Development
+
+No deployment needed. Run scripts manually:
+
+```bash
+# Generate digest
+PYTHONPATH=/path/to/project python3 scripts/run_ai_digest_pipeline.py force
 ```
 
-## Content Sources
+### Railway Production
 
-### RSS Feeds
-- VentureBeat AI
-- AI Business
-- MIT Technology Review  
-- TechCrunch AI
-- The Register AI/ML
-- Analytics India Magazine
-- Harvard Business Review
+**Automatic deployment on git push:**
 
-### Twitter Accounts
-- @AndrewYNg
-- @karpathy
-- @ylecun
-- @sama
-- @OpenAI
-- @GoogleAI
+```bash
+git add .
+git commit -m "your message"
+git push origin main
+```
 
-### Gmail Newsletters
-- Any email tagged with "newsletter" label
-- Processed in last 24 hours
-- Supports major newsletter platforms
+**Railway auto-deploys in 2-3 minutes.**
 
-## Content Evaluation
+### Deployment Checklist
 
-Articles are scored 0-100 based on alignment with "Don't panic. Prepare your data. Stay agnostic." philosophy:
+**Before ANY code change:**
+1. ✅ Identify which components affected (local vs Railway)
+2. ✅ Check if Supabase schema changes needed
+3. ✅ Check if Airtable fields need updating
+4. ✅ Review all files that import/use changed code
 
-- Business relevance for tech executives (30 points)
-- Data strategy/vendor independence themes (25 points)
-- Actionable insights vs pure research (20 points)
-- Enterprise decision-making impact (15 points)
-- Recency and relevance (10 points)
+**After code changes:**
+1. ✅ Commit and push to GitHub
+2. ✅ Wait 2-3 minutes for Railway deployment
+3. ✅ Check Railway logs for successful startup
+4. ✅ Test Slack button click end-to-end
+5. ✅ Verify Airtable data populates correctly
 
-## Daily Process
+**Files that require Railway deployment:**
+- `services/slack_webhook_handler.py`
+- `services/airtable_client.py`
+- `database/digest_storage.py`
+- `api/webhook_server.py`
+- Any file imported by the above
 
-### Automated Pipeline (Daily at 7 AM UTC)
-1. **Content Scraping**: Collect from RSS feeds, Twitter, Gmail newsletters
-2. **Multi-Stage AI Processing**:
-   - Stage 1: Filter to top 15 most relevant articles
-   - Stage 2: Select final 5 articles with enhanced summaries
-3. **Daily Digest Creation**: AI generates comprehensive summary with key insights
-4. **Database Storage**: Store in `daily_digests` table with article references
-5. **Weekly Organization**: Articles organized by week for easy boss access
+### Verifying Deployment
 
-### Boss Interaction (Anytime via MCP)
-1. **Daily Review**: Check morning digest for key developments
-2. **Weekly Planning**: Review week's themes and top articles
-3. **Newsletter Curation**: Select and prioritize articles for publication
-4. **Performance Monitoring**: Track source quality and content trends
-5. **Ad-hoc Queries**: Search for specific topics or themes as needed
+**Check Railway logs:**
+```
+✓ Server running on port 8000
+✓ digest_storage.py loaded
+✓ SlackWebhookHandler initialized
+```
+
+**Test button click:**
+1. Go to Slack #ai-daily-digest
+2. Click "Add to Pipeline"
+3. Fill modal and submit
+4. Check Airtable for new record
+
+---
+
+## Troubleshooting
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for detailed debugging guide.
+
+### Common Issues
+
+**Button click fails:**
+- Check Railway logs for errors
+- Verify article exists in Supabase `digest_articles`
+- Verify Airtable fields exist with exact names
+- Check Railway environment variables
+
+**Modal doesn't open:**
+- Verify Slack app has correct Request URL
+- Check Railway deployment is live
+- Verify `SLACK_BOT_TOKEN` is correct
+
+**Article not in Airtable:**
+- Check Railway logs for "Failed to create Airtable record"
+- Verify field names match exactly (case-sensitive)
+- Check field types in Airtable
+- Verify `AIRTABLE_API_KEY` and `AIRTABLE_BASE_ID`
+
+**Digest generation fails:**
+- Check OpenAI API key
+- Verify Supabase connection
+- Check RSS feeds are accessible
+- Verify Slack webhook URL
+
+---
 
 ## File Structure
 
 ```
 ai-newsletter-pipeline/
-├── main.py                 # Orchestration and CLI
-├── requirements.txt        # Dependencies
-├── .env.example           # Environment template
+├── README.md                          # This file
+├── CHANGELOG.md                       # Version history and changes
+├── TROUBLESHOOTING.md                 # Detailed debugging guide
+├── requirements.txt                   # Python dependencies
+├── .env                              # Environment variables (not in git)
+├── .env.example                      # Environment template
+│
+├── api/
+│   └── webhook_server.py             # Railway FastAPI server
+│
 ├── config/
-│   └── settings.py        # Configuration management
-├── scrapers/
-│   ├── rss_scraper.py     # RSS feed processing
-│   ├── twitter_scraper.py # Twitter API integration
-│   └── gmail_scraper.py   # Newsletter email processing
+│   └── settings.py                   # Configuration management
+│
 ├── database/
-│   ├── supabase_client.py    # Database operations
-│   ├── supabase_simple.py    # Simplified client for basic ops
-│   ├── digest_storage.py     # Daily digest storage and retrieval
-│   ├── weekly_manager.py     # Week cycling logic
-│   └── schema.sql           # Complete database schema with views
+│   ├── digest_storage.py             # Digest CRUD operations
+│   ├── supabase_simple.py            # Simplified Supabase client
+│   └── migrations/
+│       ├── create_digest_articles_table.sql
+│       └── update_digest_articles_remove_fields.sql
+│
 ├── processors/
-│   ├── content_processor.py  # Cleaning and formatting
-│   ├── deduplicator.py      # Duplicate detection
-│   ├── ai_evaluator.py      # OpenAI scoring (legacy)
-│   ├── multi_stage_digest.py # Two-stage AI filtering system
-│   ├── data_aggregator.py   # Multi-source content aggregation
-│   └── theme_extractor.py   # Topic and theme analysis
-├── utils/
-│   ├── logger.py          # Logging setup
-│   └── helpers.py         # Utility functions
-└── .github/workflows/
-    └── daily-scrape.yml   # CI/CD automation
+│   ├── multi_stage_digest.py         # Two-stage AI filtering
+│   ├── data_aggregator.py            # Multi-source aggregation
+│   └── theme_extractor.py            # Topic analysis
+│
+├── scrapers/
+│   ├── rss_scraper.py                # RSS feed processing
+│   └── article_scraper.py            # Full article scraping
+│
+├── services/
+│   ├── slack_webhook_handler.py      # Slack interaction handler
+│   ├── airtable_client.py            # Airtable integration
+│   └── slack_poster.py               # Slack message posting
+│
+├── scripts/
+│   └── run_ai_digest_pipeline.py     # Main digest generation script
+│
+└── utils/
+    ├── logger.py                     # Logging configuration
+    └── helpers.py                    # Utility functions
 ```
 
-## Contributing
+---
 
-1. Fork the repository
-2. Create a feature branch
-3. Make changes and add tests
-4. Submit a pull request
+## Key Concepts
+
+### AI Fields (5)
+
+Generated by GPT-4 during digest creation:
+
+1. **Detailed Summary** (400-450 chars) - Comprehensive article summary
+2. **Business Impact** (120-170 chars) - Business implications and strategic context
+3. **Key Quotes** (JSONB) - Important quotes from article
+4. **Specific Data** (JSONB) - Metrics, numbers, statistics
+5. **Companies Mentioned** (Array) - Company names referenced
+
+### User Fields (3)
+
+Selected by user in Slack modal:
+
+1. **Theme** - Strategic category (AI Governance, Vendor Lock-in, etc.)
+2. **Content Type** - Article format (News, Research, Opinion, etc.)
+3. **Your Angle** - Custom perspective or notes
+
+### Data Flow
+
+**Local → Supabase → Slack → Railway → Airtable**
+
+1. **Local:** Generate digest, store in Supabase, post to Slack
+2. **Slack:** User clicks button, modal opens
+3. **Railway:** Process modal submission, scrape article, push to Airtable
+4. **Airtable:** Final content repository with all fields
+
+### Critical Dependencies
+
+**Supabase ↔ Code ↔ Airtable**
+
+When changing AI fields, you MUST update all 3:
+1. Supabase schema (database columns)
+2. Code (field mappings)
+3. Airtable (field definitions)
+
+---
+
+## Support
+
+For issues, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) or check:
+- Railway logs: https://railway.app
+- Supabase logs: https://supabase.com
+- Slack API logs: https://api.slack.com/apps
+
+---
 
 ## License
 
