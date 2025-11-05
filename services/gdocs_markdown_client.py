@@ -6,6 +6,7 @@ Alternative to Airtable for content storage
 
 import logging
 import json
+import base64
 from typing import Optional, Dict, Any, List
 from datetime import date, datetime
 from io import BytesIO
@@ -37,7 +38,20 @@ class GoogleDocsMarkdownClient:
         """Initialize Google Drive API service"""
         try:
             # Parse service account credentials
-            credentials_dict = json.loads(self.settings.GOOGLE_SERVICE_ACCOUNT_KEY)
+            # Handle both plain JSON and Base64-encoded JSON
+            credentials_str = self.settings.GOOGLE_SERVICE_ACCOUNT_KEY
+
+            try:
+                # Try parsing as plain JSON first
+                credentials_dict = json.loads(credentials_str)
+            except json.JSONDecodeError:
+                # If that fails, try Base64 decoding first
+                try:
+                    decoded = base64.b64decode(credentials_str).decode('utf-8')
+                    credentials_dict = json.loads(decoded)
+                    self.logger.info("Decoded Base64-encoded service account key")
+                except Exception as decode_error:
+                    raise ValueError(f"Could not parse service account key as JSON or Base64: {decode_error}")
 
             credentials = service_account.Credentials.from_service_account_info(
                 credentials_dict,
