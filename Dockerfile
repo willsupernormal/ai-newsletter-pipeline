@@ -25,6 +25,7 @@ COPY utils/ ./utils/
 RUN chmod +x start.sh
 
 # Install Python dependencies (minimal set)
+# Force rebuild: Phase 3 Google Drive integration
 RUN pip install --no-cache-dir -r requirements-webhook.txt
 
 # Expose port
