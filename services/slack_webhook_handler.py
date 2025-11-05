@@ -526,10 +526,15 @@ class SlackWebhookHandler:
 
             # Validate required fields
             if not title or not notes:
-                self._post_to_channel(
-                    text=f"❌ {user_name}: Missing required fields (title and notes)",
-                    channel="C09NLCBCMCZ"
-                )
+                if self.settings.SLACK_WEBHOOK_URL:
+                    try:
+                        requests.post(
+                            self.settings.SLACK_WEBHOOK_URL,
+                            json={"text": f"❌ {user_name}: Missing required fields (title and notes)"},
+                            timeout=5
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"Failed to post validation error via webhook: {e}")
                 return
 
             # Prepare data for content pipeline
@@ -579,7 +584,7 @@ class SlackWebhookHandler:
 
                 self.logger.info(f"[IDEA] ✓ Saved to {destination_str}")
 
-                # Post confirmation to channel
+                # Post confirmation to channel using webhook (same as daily digest)
                 confirmation = f"✅ *Idea saved!*\n\n*{title}*\n\n"
                 confirmation += f"📝 Notes: {len(notes.split())} words\n"
                 if scraped_content:
@@ -587,23 +592,39 @@ class SlackWebhookHandler:
                 confirmation += f"📋 Saved to: {destination_str}\n"
                 confirmation += f"👤 Added by: {user_name}"
 
-                self._post_to_channel(
-                    text=confirmation,
-                    channel="C09NLCBCMCZ"
-                )
+                # Use webhook URL instead of chat.postMessage API
+                if self.settings.SLACK_WEBHOOK_URL:
+                    try:
+                        requests.post(
+                            self.settings.SLACK_WEBHOOK_URL,
+                            json={"text": confirmation},
+                            timeout=5
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"Failed to post confirmation via webhook: {e}")
             else:
                 error_msg = result.get('error', 'Unknown error')
-                self._post_to_channel(
-                    text=f"❌ Failed to save idea: {title}\nError: {error_msg}",
-                    channel="C09NLCBCMCZ"
-                )
+                if self.settings.SLACK_WEBHOOK_URL:
+                    try:
+                        requests.post(
+                            self.settings.SLACK_WEBHOOK_URL,
+                            json={"text": f"❌ Failed to save idea: {title}\nError: {error_msg}"},
+                            timeout=5
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"Failed to post error via webhook: {e}")
 
         except Exception as e:
             self.logger.error(f"[IDEA] Error: {e}", exc_info=True)
-            self._post_to_channel(
-                text=f"❌ Error saving idea: {str(e)}",
-                channel="C09NLCBCMCZ"
-            )
+            if self.settings.SLACK_WEBHOOK_URL:
+                try:
+                    requests.post(
+                        self.settings.SLACK_WEBHOOK_URL,
+                        json={"text": f"❌ Error saving idea: {str(e)}"},
+                        timeout=5
+                    )
+                except Exception as webhook_error:
+                    self.logger.warning(f"Failed to post error via webhook: {webhook_error}")
 
     def _send_slack_update(self, response_url: str, message: Dict[str, Any]):
         """Send update to Slack via response_url"""
