@@ -203,16 +203,30 @@ async def slack_interactions(request: Request):
         
         # Handle modal submissions differently
         if action_type == 'view_submission':
-            # Modal was submitted - process in background
+            # Check which modal was submitted
+            callback_id = payload.get('view', {}).get('callback_id')
             response_url = payload.get('response_url')
-            asyncio.create_task(
-                webhook_handler._process_add_to_pipeline_async(
-                    payload, 
-                    user_id,
-                    user_name,
-                    response_url
+
+            if callback_id == 'idea_modal':
+                # Idea modal submission
+                asyncio.create_task(
+                    webhook_handler._process_add_idea_async(
+                        payload,
+                        user_id,
+                        user_name,
+                        response_url
+                    )
                 )
-            )
+            else:
+                # Pipeline modal submission (existing flow)
+                asyncio.create_task(
+                    webhook_handler._process_add_to_pipeline_async(
+                        payload,
+                        user_id,
+                        user_name,
+                        response_url
+                    )
+                )
             # Close modal immediately
             return JSONResponse(content={"response_action": "clear"})
         else:
@@ -229,28 +243,83 @@ async def slack_interactions(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/slack/commands")
+async def slack_commands(request: Request):
+    """
+    Handle Slack slash commands (e.g., /add-idea)
+
+    Slack sends slash commands as form-encoded data
+    """
+    try:
+        logger.info("=" * 80)
+        logger.info("RECEIVED SLASH COMMAND")
+        logger.info(f"Headers: {dict(request.headers)}")
+
+        # Get headers for signature verification
+        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+        signature = request.headers.get('X-Slack-Signature', '')
+
+        # Get raw body
+        body = await request.body()
+        body_str = body.decode('utf-8')
+
+        logger.info(f"Body: {body_str[:500]}")
+
+        # Verify Slack signature
+        if not webhook_handler.verify_slack_signature(timestamp, body_str, signature):
+            logger.warning("Invalid Slack signature on slash command")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        # Parse form data
+        form_data = parse_qs(body_str)
+
+        # Extract command details
+        command = form_data.get('command', [''])[0]
+        text = form_data.get('text', [''])[0]
+        trigger_id = form_data.get('trigger_id', [''])[0]
+        user_id = form_data.get('user_id', [''])[0]
+        user_name = form_data.get('user_name', [''])[0]
+
+        logger.info(f"Slash command: {command} from {user_name}, text: '{text}'")
+
+        # Route to appropriate handler
+        if command == '/add-idea':
+            # Open modal for capturing idea
+            webhook_handler._open_idea_modal(trigger_id, text)
+            return Response(status_code=200)  # Acknowledge immediately
+        else:
+            return JSONResponse(content={
+                "text": f"Unknown command: {command}",
+                "response_type": "ephemeral"
+            })
+
+    except Exception as e:
+        logger.error(f"Error handling slash command: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/slack/events")
 async def slack_events(request: Request):
     """
     Handle Slack Events API callbacks
-    
+
     This endpoint handles Slack's URL verification challenge
     and can be extended for other event types.
     """
     try:
         data = await request.json()
-        
+
         # Handle URL verification challenge
         if data.get('type') == 'url_verification':
             logger.info("Responding to Slack URL verification challenge")
             return JSONResponse(content={"challenge": data.get('challenge')})
-        
+
         # Handle other event types (future expansion)
         event_type = data.get('event', {}).get('type')
         logger.info(f"Received Slack event: {event_type}")
-        
+
         return JSONResponse(content={"status": "ok"})
-        
+
     except Exception as e:
         logger.error(f"Error handling Slack event: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

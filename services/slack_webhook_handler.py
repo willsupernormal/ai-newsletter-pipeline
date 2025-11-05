@@ -160,7 +160,127 @@ class SlackWebhookHandler:
                 self.logger.error(f"Failed to open modal: {result.get('error')}")
         except Exception as e:
             self.logger.error(f"Error opening modal: {e}")
-    
+
+    def _open_idea_modal(self, trigger_id: str, initial_text: str = ""):
+        """Open modal for user to submit an idea/note"""
+        modal_view = {
+            "type": "modal",
+            "callback_id": "idea_modal",
+            "title": {"type": "plain_text", "text": "Add Idea"},
+            "submit": {"type": "plain_text", "text": "Save"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": [
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "*Capture your idea, note, or article reference*"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "title_block",
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "title_input",
+                        "placeholder": {"type": "plain_text", "text": "Short headline for your idea"}
+                    },
+                    "label": {"type": "plain_text", "text": "Title"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "notes_block",
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "notes_input",
+                        "multiline": True,
+                        "initial_value": initial_text,
+                        "placeholder": {"type": "plain_text", "text": "Your thoughts, context, what you want to write about..."}
+                    },
+                    "label": {"type": "plain_text", "text": "Notes"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "url_block",
+                    "optional": True,
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "url_input",
+                        "placeholder": {"type": "plain_text", "text": "https://example.com/reference-article (optional)"}
+                    },
+                    "label": {"type": "plain_text", "text": "Reference URL"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "theme_block",
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "theme_select",
+                        "placeholder": {"type": "plain_text", "text": "Select a theme"},
+                        "options": [
+                            {"text": {"type": "plain_text", "text": "AI Governance"}, "value": "AI Governance"},
+                            {"text": {"type": "plain_text", "text": "Vendor Lock-in"}, "value": "Vendor Lock-in"},
+                            {"text": {"type": "plain_text", "text": "Data Strategy"}, "value": "Data Strategy"},
+                            {"text": {"type": "plain_text", "text": "Enterprise Adoption"}, "value": "Enterprise Adoption"},
+                            {"text": {"type": "plain_text", "text": "Model Performance"}, "value": "Model Performance"},
+                            {"text": {"type": "plain_text", "text": "Regulatory Compliance"}, "value": "Regulatory Compliance"},
+                            {"text": {"type": "plain_text", "text": "Technical Innovation"}, "value": "Technical Innovation"},
+                            {"text": {"type": "plain_text", "text": "Business Strategy"}, "value": "Business Strategy"},
+                            {"text": {"type": "plain_text", "text": "Ethics & Safety"}, "value": "Ethics & Safety"},
+                            {"text": {"type": "plain_text", "text": "Market Trends"}, "value": "Market Trends"}
+                        ]
+                    },
+                    "label": {"type": "plain_text", "text": "Theme"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "content_type_block",
+                    "element": {
+                        "type": "static_select",
+                        "action_id": "content_type_select",
+                        "placeholder": {"type": "plain_text", "text": "Select content type"},
+                        "options": [
+                            {"text": {"type": "plain_text", "text": "Idea"}, "value": "Idea"},
+                            {"text": {"type": "plain_text", "text": "Draft"}, "value": "Draft"},
+                            {"text": {"type": "plain_text", "text": "Research Note"}, "value": "Research Note"},
+                            {"text": {"type": "plain_text", "text": "Article Reference"}, "value": "Article Reference"},
+                            {"text": {"type": "plain_text", "text": "Case Study"}, "value": "Case Study"},
+                            {"text": {"type": "plain_text", "text": "Analysis"}, "value": "Analysis"}
+                        ]
+                    },
+                    "label": {"type": "plain_text", "text": "Content Type"}
+                },
+                {
+                    "type": "input",
+                    "block_id": "angle_block",
+                    "optional": True,
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "angle_input",
+                        "multiline": True,
+                        "placeholder": {"type": "plain_text", "text": "Your specific perspective or focus..."}
+                    },
+                    "label": {"type": "plain_text", "text": "Angle (optional)"}
+                }
+            ]
+        }
+
+        # Call Slack API to open modal
+        try:
+            response = requests.post(
+                "https://slack.com/api/views.open",
+                headers={
+                    "Authorization": f"Bearer {self.settings.SLACK_BOT_TOKEN}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "trigger_id": trigger_id,
+                    "view": modal_view
+                }
+            )
+            result = response.json()
+            if not result.get('ok'):
+                self.logger.error(f"Failed to open idea modal: {result.get('error')}")
+        except Exception as e:
+            self.logger.error(f"Error opening idea modal: {e}")
+
     async def handle_interaction(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Main handler for Slack interactions
@@ -364,7 +484,111 @@ class SlackWebhookHandler:
                 "text": f"❌ Error adding to pipeline: {str(e)}",
                 "replace_original": False
             })
-    
+
+    async def _process_add_idea_async(
+        self,
+        payload: Dict[str, Any],
+        user_id: str,
+        user_name: str,
+        response_url: str
+    ):
+        """
+        Process "Add Idea" submission and save to Airtable + Google Drive
+        """
+        try:
+            values = payload.get('view', {}).get('state', {}).get('values', {})
+
+            # Extract form values
+            title = values.get('title_block', {}).get('title_input', {}).get('value', '').strip()
+            notes = values.get('notes_block', {}).get('notes_input', {}).get('value', '').strip()
+            url = values.get('url_block', {}).get('url_input', {}).get('value', '').strip()
+            theme = values.get('theme_block', {}).get('theme_select', {}).get('selected_option', {}).get('value')
+            content_type = values.get('content_type_block', {}).get('content_type_select', {}).get('selected_option', {}).get('value')
+            angle = values.get('angle_block', {}).get('angle_input', {}).get('value', '').strip()
+
+            self.logger.info(f"[IDEA] Processing idea: {title}")
+
+            # Validate required fields
+            if not title or not notes:
+                self._post_to_channel(
+                    text=f"❌ {user_name}: Missing required fields (title and notes)",
+                    channel="C09NLCBCMCZ"
+                )
+                return
+
+            # Prepare data for content pipeline
+            today = datetime.now().date().isoformat()
+            idea_data = {
+                'title': title,
+                'url': url if url else f"manual-idea-{datetime.now().timestamp()}",  # Unique URL for ideas without links
+                'source_name': 'Manual Entry',
+                'digest_date': today,
+                'stage': '📥 Saved',
+                'priority': '🟡 Medium',
+                'theme': theme,
+                'content_type': content_type,
+                'your_angle': angle,
+                'full_article_text': notes,  # User's notes as main content
+                'word_count': len(notes.split()),
+            }
+
+            # If URL provided, try to scrape it
+            scraped_content = ""
+            if url and url.startswith('http'):
+                try:
+                    self.logger.info(f"[IDEA] Scraping reference URL: {url}")
+                    scrape_result = await self.scraper.scrape_article(url)
+                    if scrape_result and scrape_result.get('full_text'):
+                        scraped_content = scrape_result.get('full_text', '')
+                        idea_data['word_count'] += scrape_result.get('word_count', 0)
+                        idea_data['author'] = scrape_result.get('author')
+                        # Append scraped content to notes
+                        idea_data['full_article_text'] = f"{notes}\n\n---\n\n## Reference Article\n\n{scraped_content}"
+                except Exception as scrape_error:
+                    self.logger.warning(f"[IDEA] Failed to scrape URL: {scrape_error}")
+                    # Continue without scraped content
+
+            # Save to content pipeline (Airtable + Google Drive)
+            result = await self.content_pipeline.save_article(idea_data)
+
+            if result.get('success'):
+                # Extract results
+                destinations = []
+                if result.get('airtable', {}).get('success'):
+                    destinations.append("Airtable")
+                if result.get('markdown', {}).get('success'):
+                    destinations.append("Google Drive")
+
+                destination_str = " & ".join(destinations)
+
+                self.logger.info(f"[IDEA] ✓ Saved to {destination_str}")
+
+                # Post confirmation to channel
+                confirmation = f"✅ *Idea saved!*\n\n*{title}*\n\n"
+                confirmation += f"📝 Notes: {len(notes.split())} words\n"
+                if scraped_content:
+                    confirmation += f"📄 Reference scraped: {len(scraped_content.split())} words\n"
+                confirmation += f"📋 Saved to: {destination_str}\n"
+                confirmation += f"👤 Added by: {user_name}"
+
+                self._post_to_channel(
+                    text=confirmation,
+                    channel="C09NLCBCMCZ"
+                )
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                self._post_to_channel(
+                    text=f"❌ Failed to save idea: {title}\nError: {error_msg}",
+                    channel="C09NLCBCMCZ"
+                )
+
+        except Exception as e:
+            self.logger.error(f"[IDEA] Error: {e}", exc_info=True)
+            self._post_to_channel(
+                text=f"❌ Error saving idea: {str(e)}",
+                channel="C09NLCBCMCZ"
+            )
+
     def _send_slack_update(self, response_url: str, message: Dict[str, Any]):
         """Send update to Slack via response_url"""
         # Skip if no response_url (happens with modal submissions)
