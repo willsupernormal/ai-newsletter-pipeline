@@ -622,6 +622,7 @@ class SlackWebhookHandler:
     def _post_to_channel(self, text: str, channel: str = "C09NLCBCMCZ"):
         """Post a message to a Slack channel"""
         try:
+            self.logger.info(f"Attempting to post to channel: {channel}")
             response = requests.post(
                 "https://slack.com/api/chat.postMessage",
                 headers={
@@ -635,8 +636,10 @@ class SlackWebhookHandler:
                 }
             )
             result = response.json()
+            self.logger.info(f"Slack API response: {result}")
             if not result.get('ok'):
                 self.logger.error(f"Failed to post to channel: {result.get('error')}")
+                self.logger.error(f"Full Slack response: {result}")
         except Exception as e:
             self.logger.error(f"Error posting to channel: {e}")
     
