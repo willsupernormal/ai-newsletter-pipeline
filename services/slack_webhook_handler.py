@@ -537,7 +537,7 @@ class SlackWebhookHandler:
             idea_data = {
                 'title': title,
                 'url': url if url else f"manual-idea-{datetime.now().timestamp()}",  # Unique URL for ideas without links
-                'source_name': 'Manual Entry',
+                'source_name': 'Unknown',  # Use existing Airtable option
                 'digest_date': today,
                 'stage': '📥 Saved',
                 'priority': '🟡 Medium',
