@@ -12,6 +12,10 @@ asyncpg>=0.29.0
 # Airtable
 pyairtable>=2.3.0
 
+# Google Drive (Phase 3: Markdown output)
+google-auth>=2.23.0
+google-api-python-client>=2.100.0
+
 # Article scraping (lightweight)
 newspaper3k>=0.2.8
 trafilatura>=1.6.0
