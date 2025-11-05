@@ -25,20 +25,39 @@ This system automatically:
 2. **Filters** to top 5 articles using GPT-4 multi-stage selection
 3. **Posts** digest to Slack with interactive buttons
 4. **Enables** one-click article addition to Airtable content pipeline
+5. **Allows** manual idea capture via `/add-idea` slash command
 
 ### Key Features
 
+#### Automated Content Curation
 - ✅ **Multi-stage AI filtering** - GPT-4 selects best 5 from 180+ articles
 - ✅ **5 AI-generated fields** - Summary, business impact, quotes, data, companies
 - ✅ **Interactive Slack modal** - Select theme, content type, and angle
+- ✅ **Enhanced daily digest** - Bold headers with visual separators for easy scanning
+
+#### Manual Content Entry
+- ✅ **`/add-idea` slash command** - Capture ideas, notes, and drafts directly from Slack
+- ✅ **Optional URL scraping** - Reference articles automatically scraped if URL provided
+- ✅ **Same categorization** - Theme, Content Type, and Angle fields like curated content
+- ✅ **Instant save** - Creates records in both Airtable and Google Drive
+
+#### Flexible Storage
 - ✅ **Flexible output** - Save to Airtable, Google Drive (Markdown), or Both
 - ✅ **Markdown + YAML** - Structured, Claude Code-queryable content files
-- ✅ **Railway webhook server** - Handles Slack button clicks in production
+- ✅ **Railway webhook server** - Handles Slack interactions in production
 - ✅ **Supabase storage** - Central database for articles and AI data
 
 ---
 
 ## System Architecture
+
+### Flow Overview
+
+**Two content entry paths:**
+1. **Automated:** Daily digest with curated articles (AI-filtered from RSS feeds)
+2. **Manual:** `/add-idea` slash command for capturing ideas, notes, and drafts
+
+Both paths converge at the Content Pipeline and save to the same destinations.
 
 ### Components
 
@@ -58,24 +77,32 @@ This system automatically:
 │                      2. SLACK                                │
 │                  (User Interface)                            │
 ├──────────────────────────────────────────────────────────────┤
-│  • User sees 5 articles with buttons                        │
-│  • Clicks "Add to Pipeline"                                 │
-│  • Modal opens with 3 optional fields:                      │
-│    - Theme (10 options)                                     │
-│    - Content Type (6 options)                               │
-│    - Your Angle (free text)                                 │
+│  PATH A: User clicks "Add to Pipeline" button               │
+│    → Modal opens with 3 optional fields                     │
+│                                                              │
+│  PATH B: User types /add-idea command (Phase 3.1)           │
+│    → Modal opens with:                                      │
+│      • Title (required)                                     │
+│      • Notes (required)                                     │
+│      • Reference URL (optional)                             │
+│      • Theme, Content Type, Your Angle                      │
 └──────────────────────────────────────────────────────────────┘
                             ↓
 ┌──────────────────────────────────────────────────────────────┐
 │                     3. RAILWAY                               │
 │              (Webhook Server - Production)                   │
 ├──────────────────────────────────────────────────────────────┤
-│  • Receives button click webhook                            │
-│  • Opens modal for user input                               │
-│  • On submit: Fetches article from Supabase                 │
-│  • Scrapes full article text                                │
-│  • Routes to Content Pipeline (Airtable/Drive/Both)         │
-│  • Posts success message to Slack                           │
+│  PATH A (Curated):                                           │
+│    • Fetches article from Supabase                          │
+│    • Scrapes full article text                             │
+│                                                              │
+│  PATH B (Manual):                                            │
+│    • Uses user's notes as content                           │
+│    • Optionally scrapes reference URL if provided           │
+│                                                              │
+│  BOTH PATHS:                                                 │
+│    • Route to Content Pipeline                              │
+│    • Post success message to Slack                          │
 └──────────────────────────────────────────────────────────────┘
                             ↓
 ┌──────────────────────────────────────────────────────────────┐
@@ -213,7 +240,7 @@ Create "Content Pipeline" table with these fields:
 **Basic Fields:**
 - Title (Single line text)
 - URL (URL)
-- Source (Single line text)
+- Source (Single select) - Add "Manual Entry" as an option for `/add-idea` entries
 - Date (Date)
 - Stage (Single select: 📥 Saved, 📝 Writing, ✅ Published)
 - Priority (Single select: 🔴 High, 🟡 Medium, 🟢 Low)
@@ -247,8 +274,13 @@ Create "Content Pipeline" table with these fields:
    - `chat:write`
    - `channels:read`
    - `im:write`
-4. Install app to workspace
-5. Copy tokens to `.env`
+4. Create **Slash Command** (for `/add-idea`):
+   - Command: `/add-idea`
+   - Request URL: `https://your-railway-app.up.railway.app/slack/commands`
+   - Short Description: `Capture an idea, note, or draft for content pipeline`
+   - Usage Hint: `[optional initial text]`
+5. Install app to workspace
+6. Copy tokens to `.env`
 
 ### 6. Google Drive Setup (Phase 3 - Optional)
 
@@ -334,6 +366,53 @@ PYTHONPATH=/path/to/project python3 scripts/run_ai_digest_pipeline.py show
 - 3 user-selected fields
 - Full article text
 - All metadata
+
+### Manual Idea Capture (Phase 3.1)
+
+**User types `/add-idea` in Slack:**
+1. Slack opens modal with form fields:
+   - **Title** (required): Short headline for your idea
+   - **Notes** (required): Your thoughts, context, what you want to write about
+   - **Reference URL** (optional): Link to reference article (will be scraped if provided)
+   - **Theme** (required): Same 10 theme options as curated content
+   - **Content Type** (required): News, Research, Opinion, Analysis, Case Study, Tutorial
+   - **Your Angle** (optional): Custom perspective or notes
+2. User fills fields and clicks Save
+3. Modal closes, processing starts in background
+4. Railway:
+   - If URL provided: Scrapes reference article content
+   - Combines user notes + scraped content into markdown format
+   - Routes to Content Pipeline (Airtable/Drive/Both based on `CONTENT_OUTPUT_MODE`)
+   - Posts confirmation to #ai-daily-digest channel
+5. **Result:**
+   - Airtable record created with source = "Manual Entry"
+   - Google Drive markdown file created (if enabled) with YAML frontmatter
+   - All queryable alongside curated content
+
+**Use Cases:**
+- 💡 **Quick idea capture:** "I want to write about X" directly from Slack
+- 📝 **Research notes:** Save thoughts with optional reference links
+- 📋 **Draft organization:** Store article outlines alongside curated content
+- 🔍 **Context preservation:** All ideas queryable by Claude Code
+
+**Example `/add-idea` output in Google Drive:**
+```markdown
+---
+title: "AI agent orchestration patterns"
+theme: "Technical Innovation"
+content_type: "Research"
+source: "Manual Entry"
+date: "2025-11-05"
+---
+
+# AI agent orchestration patterns
+
+## Your Notes
+I want to explore how multi-agent systems coordinate workflows...
+
+## Reference Article
+[If URL provided, full scraped article text appears here]
+```
 
 ---
 
@@ -464,9 +543,11 @@ ai-newsletter-pipeline/
 │   └── article_scraper.py            # Full article scraping
 │
 ├── services/
-│   ├── slack_webhook_handler.py      # Slack interaction handler
+│   ├── slack_webhook_handler.py      # Slack interaction handler (buttons, modals, slash commands)
+│   ├── slack_notifier.py             # Daily digest Slack posting
 │   ├── airtable_client.py            # Airtable integration
-│   └── slack_poster.py               # Slack message posting
+│   ├── content_pipeline.py           # Content routing orchestrator (Phase 3)
+│   └── gdocs_markdown_client.py      # Google Drive markdown file creation (Phase 3)
 │
 ├── scripts/
 │   └── run_ai_digest_pipeline.py     # Main digest generation script

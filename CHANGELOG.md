@@ -4,6 +4,107 @@ All notable changes to the AI Newsletter Pipeline project.
 
 ---
 
+## [3.1.0] - 2025-11-05
+
+### Major Features
+
+#### `/add-idea` Slash Command
+- **Added:** Manual content entry via Slack slash command
+- **Features:**
+  - Capture ideas, notes, and drafts without external articles
+  - Optional URL field for reference articles (auto-scraped if provided)
+  - Same categorization as curated articles (Theme, Content Type, Angle)
+  - Saves to both Airtable and Google Drive simultaneously
+  - Posts confirmation to #ai-daily-digest
+
+#### Use Cases
+- **Quick idea capture:** "I want to write about X" directly from Slack
+- **Research notes:** Save thoughts with optional reference links
+- **Draft organization:** Store article outlines alongside curated content
+- **Context preservation:** All ideas queryable by Claude Code
+
+#### Enhanced Daily Digest Headers
+- **Added:** Bold visual separator with line (━━━━━━━━━━━━━━━━━━━━━━━━━)
+- **Added:** Prominent "AI DAILY DIGEST" heading
+- **Added:** Full date format (e.g., "Tuesday, November 5, 2025")
+- **Added:** Divider line for better message separation
+- **Benefit:** Much easier to identify digest boundaries when scrolling through Slack
+
+### Technical Implementation
+
+#### Slash Command Flow
+```
+User types: /add-idea [optional text]
+→ Modal opens with form fields
+→ User fills: Title, Notes, URL (optional), Theme, Content Type, Angle
+→ System saves to Airtable + Google Drive
+→ Confirmation posted to #ai-daily-digest
+```
+
+#### New Components
+- **Endpoint:** `POST /slack/commands` - Handles slash command requests
+- **Modal:** `_open_idea_modal()` - Form UI for idea capture
+- **Processor:** `_process_add_idea_async()` - Async idea processing
+- **Integration:** Reuses existing ContentPipelineHandler infrastructure
+
+#### Markdown Output Example
+```markdown
+---
+title: "AI agent orchestration patterns"
+theme: "Technical Innovation"
+content_type: "Research"
+source: "Manual Entry"
+date: "2025-11-05"
+---
+
+# AI agent orchestration patterns
+
+## Your Notes
+I want to explore how multi-agent systems coordinate...
+
+## Reference Article
+[If URL provided, full scraped article text appears here]
+```
+
+### Bug Fixes
+
+#### Google Drive Integration
+- **Fixed:** Base64-encoded service account credentials now properly decoded
+- **Fixed:** Handle both plain JSON and Base64 formats for credentials
+- **Fixed:** Proper null handling for optional modal fields (URL, Angle)
+
+#### Slack Notifications
+- **Fixed:** Button update error after pipeline submission
+- **Fixed:** Use webhook URL for confirmations (matches daily digest approach)
+- **Fixed:** No more "Invalid URL 'None'" errors
+
+#### Airtable Field Mapping
+- **Fixed:** Content Type options now match Airtable exactly (News, Research, Opinion, Analysis, Case Study, Tutorial)
+- **Fixed:** Source field accepts "Manual Entry" option
+- **Fixed:** Proper field validation to prevent 422 errors
+
+### Configuration
+
+#### Slack App Setup
+1. Create slash command in Slack App settings:
+   ```
+   Command: /add-idea
+   Request URL: https://your-railway-app.railway.app/slack/commands
+   Short Description: Capture an idea, note, or draft
+   ```
+2. Reinstall app to workspace
+
+#### Airtable Setup
+- **Source field:** Add "Manual Entry" as option
+- **Content Type field:** Ensure News, Research, Opinion, Analysis, Case Study, Tutorial exist
+
+### Files Changed
+- `api/webhook_server.py` - Added slash command endpoint and routing
+- `services/slack_webhook_handler.py` - Added idea modal and processing logic
+- `services/slack_notifier.py` - Enhanced daily digest header formatting
+
+---
+
 ## [3.0.0] - 2025-11-05
 
 ### Major Changes
