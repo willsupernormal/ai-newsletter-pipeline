@@ -237,12 +237,12 @@ class SlackWebhookHandler:
                         "action_id": "content_type_select",
                         "placeholder": {"type": "plain_text", "text": "Select content type"},
                         "options": [
-                            {"text": {"type": "plain_text", "text": "Idea"}, "value": "Idea"},
-                            {"text": {"type": "plain_text", "text": "Draft"}, "value": "Draft"},
-                            {"text": {"type": "plain_text", "text": "Research Note"}, "value": "Research Note"},
-                            {"text": {"type": "plain_text", "text": "Article Reference"}, "value": "Article Reference"},
+                            {"text": {"type": "plain_text", "text": "News"}, "value": "News"},
+                            {"text": {"type": "plain_text", "text": "Research"}, "value": "Research"},
+                            {"text": {"type": "plain_text", "text": "Opinion"}, "value": "Opinion"},
+                            {"text": {"type": "plain_text", "text": "Analysis"}, "value": "Analysis"},
                             {"text": {"type": "plain_text", "text": "Case Study"}, "value": "Case Study"},
-                            {"text": {"type": "plain_text", "text": "Analysis"}, "value": "Analysis"}
+                            {"text": {"type": "plain_text", "text": "Tutorial"}, "value": "Tutorial"}
                         ]
                     },
                     "label": {"type": "plain_text", "text": "Content Type"}
