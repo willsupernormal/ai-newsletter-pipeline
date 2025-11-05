@@ -16,6 +16,7 @@ from config.settings import Settings
 from database.supabase_simple import SimpleSupabaseClient
 from database.digest_storage import DigestStorage
 from services.airtable_client import AirtableClient
+from services.content_pipeline import ContentPipelineHandler
 from scrapers.article_scraper import ArticleScraper
 
 
@@ -27,9 +28,10 @@ class SlackWebhookHandler:
         self.logger = logging.getLogger(__name__)
         self.supabase = SimpleSupabaseClient(settings)
         self.digest_storage = DigestStorage(settings)
-        self.airtable = AirtableClient(settings)
+        self.airtable = AirtableClient(settings)  # Keep for backward compatibility
+        self.content_pipeline = ContentPipelineHandler(settings)  # NEW: Unified content handler
         self.scraper = ArticleScraper()
-        
+
         if not settings.SLACK_SIGNING_SECRET:
             raise ValueError("SLACK_SIGNING_SECRET not configured")
     
@@ -294,16 +296,23 @@ class SlackWebhookHandler:
             self.logger.info(f"[ASYNC] Scraping: {article['url']}")
             scrape_result = await self.scraper.scrape_article(article['url'])
             
-            # Prepare and push to Airtable
+            # Prepare data for content pipeline (Airtable and/or Markdown)
             airtable_data = self._prepare_airtable_data(article, scrape_result, theme, content_type, angle)
-            record_id = self.airtable.create_article_record(airtable_data)
-            
-            if record_id:
-                self.logger.info(f"[ASYNC] ✓ Added to Airtable: {record_id}")
+
+            # Use content pipeline to save (routes to Airtable, Markdown, or Both)
+            result = await self.content_pipeline.save_article(airtable_data)
+
+            # Extract record_id for backward compatibility
+            record_id = None
+            if result.get('success'):
+                if 'airtable' in result and result['airtable'].get('success'):
+                    record_id = result['airtable'].get('record_id')
+                self.logger.info(f"[ASYNC] ✓ Saved via content pipeline: {result.get('mode')}")
                 
-                # Mark article as added to Airtable in digest_articles table
-                await self.digest_storage.mark_added_to_airtable(article_id, record_id)
-                
+                # Mark article as added to Airtable in digest_articles table (if we have record_id)
+                if record_id:
+                    await self.digest_storage.mark_added_to_airtable(article_id, record_id)
+
                 # Update button to show success
                 original_message = payload.get('message', {})
                 success_blocks = self._update_button_to_success(
@@ -311,31 +320,41 @@ class SlackWebhookHandler:
                     payload.get('actions', [{}])[0].get('block_id')
                 )
                 
+                # Build success message with destination info
+                destinations = []
+                if 'airtable' in result and result['airtable'].get('success'):
+                    destinations.append("Airtable")
+                if 'markdown' in result and result['markdown'].get('success'):
+                    destinations.append("Google Drive")
+
+                destination_str = " & ".join(destinations) if destinations else "content pipeline"
+
                 # Send success update
                 if is_modal_submission:
                     # For modal submissions, post a new message to the channel
                     self._post_to_channel(
-                        f"✅ *Added to Pipeline!*\n\n*{article['title']}*\n\n"
+                        f"✅ *Added to {destination_str}!*\n\n*{article['title']}*\n\n"
                         f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
                         f"{f'🎯 Theme: {theme}' if theme else ''}\n"
                         f"{f'📝 Type: {content_type}' if content_type else ''}\n"
                         f"🔗 <{article['url']}|View Original>\n"
-                        f"📋 Check Airtable: Content Pipeline",
+                        f"📋 Saved to: {destination_str}",
                         channel=channel_id
                     )
                 else:
                     # For button clicks, update the original message
                     self._send_slack_update(response_url, {
-                        "text": f"✅ *Added to Pipeline!*\n\n*{article['title']}*\n\n"
+                        "text": f"✅ *Added to {destination_str}!*\n\n*{article['title']}*\n\n"
                                f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
                                f"🔗 <{article['url']}|View Original>\n"
-                               f"📋 Check Airtable: Content Pipeline",
+                               f"📋 Saved to: {destination_str}",
                         "blocks": success_blocks,
                         "replace_original": True
                     })
             else:
+                error_msg = result.get('error', 'Unknown error')
                 self._send_slack_update(response_url, {
-                    "text": f"❌ Failed to add to Airtable: {article['title']}",
+                    "text": f"❌ Failed to save: {article['title']}\nError: {error_msg}",
                     "replace_original": False
                 })
                 

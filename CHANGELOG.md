@@ -4,6 +4,113 @@ All notable changes to the AI Newsletter Pipeline project.
 
 ---
 
+## [3.0.0] - 2025-11-05
+
+### Major Changes
+
+#### Phase 3: Google Drive / Markdown Output
+- **Added:** Flexible content output system with 3 modes
+  - `CONTENT_OUTPUT_MODE=airtable` - Airtable only (default, backward compatible)
+  - `CONTENT_OUTPUT_MODE=markdown` - Google Drive markdown only
+  - `CONTENT_OUTPUT_MODE=both` - Save to both destinations in parallel
+- **Added:** Markdown + YAML frontmatter format for Claude Code querying
+- **Added:** Google Drive API integration (reuses Context Parser service account)
+- **Benefit:** Choose output destination without code changes, queryable content files
+
+#### New Files Created
+- `services/gdocs_markdown_client.py` - Google Drive markdown file creation and upload
+- `services/content_pipeline.py` - Content routing orchestrator
+
+#### Updated Files
+- `services/slack_webhook_handler.py` - Routes to content pipeline instead of direct Airtable
+- `config/settings.py` - Added 3 new environment variables
+- `.env.example` - Documented Google Drive configuration
+- `README.md` - Added Phase 3 documentation and architecture diagrams
+
+### Technical Implementation
+
+#### Content Pipeline Architecture
+```python
+# User clicks button in Slack
+→ Railway webhook receives submission
+→ ContentPipelineHandler routes based on CONTENT_OUTPUT_MODE
+→ Saves to Airtable and/or Google Drive
+→ Returns unified result
+→ Slack shows success with destination info
+```
+
+#### Markdown File Format
+- **YAML frontmatter:** Structured metadata (title, theme, tags, etc.)
+- **Markdown body:** Human-readable content with sections
+- **Queryable:** Use `grep` or Claude Code to filter by metadata
+- **Example:** `2025-11-05-openai-gpt5.md`
+
+#### Environment Variables (New)
+```bash
+CONTENT_OUTPUT_MODE=airtable|markdown|both
+GOOGLE_SERVICE_ACCOUNT_KEY={json_string}
+MARKDOWN_CONTENT_FOLDER_ID=drive_folder_id
+```
+
+### Backward Compatibility
+
+- ✅ **100% backward compatible** - Defaults to Airtable-only mode
+- ✅ **No breaking changes** - Existing deployments continue working
+- ✅ **Old code preserved** - AirtableClient still exists, now wrapped by pipeline
+- ✅ **Easy rollback** - Set `CONTENT_OUTPUT_MODE=airtable` to revert
+
+### Benefits
+
+#### For Content Management
+- **Flexibility:** Choose storage based on workflow needs
+- **Redundancy:** Save to both destinations for backup
+- **Migration:** Easy transition from Airtable to Drive
+
+#### For Claude Code Integration
+- **Queryable:** Structured YAML enables filtering and search
+- **File-first:** Matches Context Parser System philosophy
+- **Grep-friendly:** Use CLI tools to query content
+- **Example queries:**
+  ```bash
+  grep -r "theme: \"AI Governance\"" ./content/
+  grep -r "companies_mentioned.*OpenAI" ./content/
+  ```
+
+### Infrastructure Reuse
+
+- **Service Account:** Reuses `context-parser-service@context-parser.iam.gserviceaccount.com`
+- **Shared Drive:** Uses same "Context Parser" drive as Slack integration
+- **Railway:** Same deployment, just new environment variables
+- **No new costs:** Leverages existing Google Workspace
+
+### Testing Recommendations
+
+1. **Test Airtable-only** (default):
+   ```bash
+   CONTENT_OUTPUT_MODE=airtable
+   ```
+
+2. **Test Markdown-only:**
+   ```bash
+   CONTENT_OUTPUT_MODE=markdown
+   GOOGLE_SERVICE_ACCOUNT_KEY={...}
+   MARKDOWN_CONTENT_FOLDER_ID={...}
+   ```
+
+3. **Test Both:**
+   ```bash
+   CONTENT_OUTPUT_MODE=both
+   ```
+
+### Documentation
+
+- **README.md:** Complete Phase 3 section with architecture diagrams
+- **CHANGELOG.md:** This file
+- **.env.example:** Documented all new variables with examples
+- **In-code comments:** Comprehensive docstrings in new files
+
+---
+
 ## [2.0.0] - 2025-10-30
 
 ### Major Changes

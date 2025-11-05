@@ -1,8 +1,8 @@
 # AI Newsletter Pipeline
 
-> **Automated daily AI news digest with intelligent filtering, Slack integration, and Airtable content pipeline**
+> **Automated daily AI news digest with intelligent filtering, Slack integration, and flexible content storage (Airtable & Google Drive)**
 
-**Status:** ✅ Production | **Last Updated:** November 4, 2025
+**Status:** ✅ Production | **Last Updated:** November 5, 2025
 
 ---
 
@@ -31,7 +31,8 @@ This system automatically:
 - ✅ **Multi-stage AI filtering** - GPT-4 selects best 5 from 180+ articles
 - ✅ **5 AI-generated fields** - Summary, business impact, quotes, data, companies
 - ✅ **Interactive Slack modal** - Select theme, content type, and angle
-- ✅ **Airtable integration** - One-click article addition with full metadata
+- ✅ **Flexible output** - Save to Airtable, Google Drive (Markdown), or Both
+- ✅ **Markdown + YAML** - Structured, Claude Code-queryable content files
 - ✅ **Railway webhook server** - Handles Slack button clicks in production
 - ✅ **Supabase storage** - Central database for articles and AI data
 
@@ -73,20 +74,61 @@ This system automatically:
 │  • Opens modal for user input                               │
 │  • On submit: Fetches article from Supabase                 │
 │  • Scrapes full article text                                │
-│  • Pushes to Airtable with all fields                       │
+│  • Routes to Content Pipeline (Airtable/Drive/Both)         │
 │  • Posts success message to Slack                           │
 └──────────────────────────────────────────────────────────────┘
                             ↓
 ┌──────────────────────────────────────────────────────────────┐
-│                    4. AIRTABLE                               │
-│              (Content Management System)                     │
+│               4. CONTENT PIPELINE (Phase 3)                  │
+│         (Flexible Output - Configurable via ENV)             │
 ├──────────────────────────────────────────────────────────────┤
-│  Article stored with:                                        │
-│  • Basic: Title, URL, Source, Date, Word Count              │
-│  • AI Fields (5): Summary, Impact, Quotes, Data, Companies  │
-│  • User Fields (3): Theme, Content Type, Your Angle         │
-│  • Full Article Text (scraped)                              │
+│  MODE: "airtable" (default)                                  │
+│    ↓ Saves to Airtable only                                 │
+│                                                              │
+│  MODE: "markdown"                                            │
+│    ↓ Saves to Google Drive as Markdown + YAML               │
+│                                                              │
+│  MODE: "both"                                                │
+│    ↓ Saves to BOTH destinations in parallel                 │
 └──────────────────────────────────────────────────────────────┘
+                     ↓              ↓
+        ┌────────────────┐    ┌─────────────────┐
+        │   AIRTABLE     │    │  GOOGLE DRIVE   │
+        │  (Structured)  │    │   (Markdown)    │
+        └────────────────┘    └─────────────────┘
+```
+
+### Phase 3: Google Drive / Markdown Output (NEW)
+
+**Why Markdown + YAML?**
+- ✅ **Claude Code queryable** - Structured YAML frontmatter for filtering
+- ✅ **Plain text** - Searchable, versionable, future-proof
+- ✅ **File-first** - Matches Context Parser System philosophy
+- ✅ **Grep-friendly** - Use CLI tools to query (e.g., `grep "theme: \"AI Governance\""`)
+
+**Example Markdown File:**
+```markdown
+---
+title: "OpenAI Launches GPT-5"
+theme: "Technical Innovation"
+content_type: "News"
+companies_mentioned: ["OpenAI", "Microsoft"]
+tags: ["ai-governance", "gpt5"]
+---
+
+# OpenAI Launches GPT-5
+
+## Summary
+[AI-generated summary...]
+
+## Full Article Text
+[Scraped content...]
+```
+
+**Configuration (Railway Environment Variable):**
+```bash
+# Options: "airtable", "markdown", "both"
+CONTENT_OUTPUT_MODE=both
 ```
 
 ### Technology Stack
@@ -96,7 +138,8 @@ This system automatically:
 - **Database:** Supabase (PostgreSQL)
 - **Webhook Server:** Railway (FastAPI)
 - **Messaging:** Slack API
-- **CMS:** Airtable
+- **Content Storage:** Airtable & Google Drive (configurable)
+- **Drive API:** Google Drive API v3 (same service account as Context Parser)
 - **Scraping:** newspaper3k, BeautifulSoup4
 
 ---
@@ -143,6 +186,11 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 # Airtable
 AIRTABLE_API_KEY=key...
 AIRTABLE_BASE_ID=app...
+
+# Google Drive / Markdown (Phase 3 - Optional)
+CONTENT_OUTPUT_MODE=airtable  # or "markdown" or "both"
+GOOGLE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
+MARKDOWN_CONTENT_FOLDER_ID=...
 
 # Railway (production only)
 WEBHOOK_PORT=8000
@@ -202,7 +250,33 @@ Create "Content Pipeline" table with these fields:
 4. Install app to workspace
 5. Copy tokens to `.env`
 
-### 6. Railway Deployment
+### 6. Google Drive Setup (Phase 3 - Optional)
+
+**Only needed if using `CONTENT_OUTPUT_MODE=markdown` or `CONTENT_OUTPUT_MODE=both`**
+
+1. **Create folder in Google Drive:**
+   - Open "Context Parser" Shared Drive (or create new Shared Drive)
+   - Create folder named "AI-Newsletter-Content"
+   - Copy folder ID from URL: `https://drive.google.com/drive/folders/FOLDER_ID_HERE`
+
+2. **Share with service account:**
+   - Right-click folder → Share
+   - Add: `context-parser-service@context-parser.iam.gserviceaccount.com`
+   - Permission: Manager
+
+3. **Get service account credentials:**
+   - Already exists from Context Parser System project
+   - File: `context-parser-4af9e6defed8.json`
+   - Convert to single-line JSON string or base64 for Railway
+
+4. **Add to Railway environment variables:**
+   ```bash
+   CONTENT_OUTPUT_MODE=both  # or "markdown"
+   GOOGLE_SERVICE_ACCOUNT_KEY={...json...}
+   MARKDOWN_CONTENT_FOLDER_ID=your-folder-id
+   ```
+
+### 7. Railway Deployment
 
 1. Create Railway project at https://railway.app
 2. Connect GitHub repo

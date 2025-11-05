@@ -90,3 +90,7 @@ credentials.json
 data/
 cache/
 downloads/
+
+# Backup files (Phase 3 rollback safety)
+*_OLD_AIRTABLE_ONLY*
+*.OLD_AIRTABLE_ONLY

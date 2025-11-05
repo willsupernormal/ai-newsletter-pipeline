@@ -113,6 +113,20 @@ class Settings(BaseSettings):
         default=None,
         description="Public URL of deployed webhook server (e.g., https://your-app.railway.app)"
     )
+
+    # Google Drive / Markdown Output Configuration (Phase 3)
+    CONTENT_OUTPUT_MODE: str = Field(
+        default="airtable",
+        description="Content output mode: 'airtable', 'markdown', or 'both'"
+    )
+    GOOGLE_SERVICE_ACCOUNT_KEY: Optional[str] = Field(
+        default=None,
+        description="Google service account credentials JSON (as string)"
+    )
+    MARKDOWN_CONTENT_FOLDER_ID: Optional[str] = Field(
+        default=None,
+        description="Google Drive folder ID for markdown content storage"
+    )
     
     @field_validator('TWITTER_SERVICE')
     @classmethod
@@ -127,6 +141,13 @@ class Settings(BaseSettings):
         if v not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
             raise ValueError('LOG_LEVEL must be a valid logging level')
         return v
+
+    @field_validator('CONTENT_OUTPUT_MODE')
+    @classmethod
+    def validate_content_output_mode(cls, v):
+        if v.lower() not in ['airtable', 'markdown', 'both']:
+            raise ValueError('CONTENT_OUTPUT_MODE must be "airtable", "markdown", or "both"')
+        return v.lower()
     
     @property
     def twitter_accounts_list(self) -> List[str]:
