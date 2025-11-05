@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Cache bust for requirements update (Phase 3)
+ARG CACHEBUST=1
+RUN echo "Cache bust: $CACHEBUST"
+
 # Copy only necessary files for webhook server
 COPY requirements-webhook.txt .
 COPY start.sh .
