@@ -498,13 +498,29 @@ class SlackWebhookHandler:
         try:
             values = payload.get('view', {}).get('state', {}).get('values', {})
 
-            # Extract form values
-            title = values.get('title_block', {}).get('title_input', {}).get('value', '').strip()
-            notes = values.get('notes_block', {}).get('notes_input', {}).get('value', '').strip()
-            url = values.get('url_block', {}).get('url_input', {}).get('value', '').strip()
+            # Extract form values (handle None for optional fields)
+            title = values.get('title_block', {}).get('title_input', {}).get('value', '')
+            if title:
+                title = title.strip()
+
+            notes = values.get('notes_block', {}).get('notes_input', {}).get('value', '')
+            if notes:
+                notes = notes.strip()
+
+            url = values.get('url_block', {}).get('url_input', {}).get('value')
+            if url:
+                url = url.strip()
+            else:
+                url = ''
+
             theme = values.get('theme_block', {}).get('theme_select', {}).get('selected_option', {}).get('value')
             content_type = values.get('content_type_block', {}).get('content_type_select', {}).get('selected_option', {}).get('value')
-            angle = values.get('angle_block', {}).get('angle_input', {}).get('value', '').strip()
+
+            angle = values.get('angle_block', {}).get('angle_input', {}).get('value')
+            if angle:
+                angle = angle.strip()
+            else:
+                angle = ''
 
             self.logger.info(f"[IDEA] Processing idea: {title}")
 
