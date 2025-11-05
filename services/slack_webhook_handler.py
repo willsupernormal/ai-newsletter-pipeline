@@ -367,6 +367,11 @@ class SlackWebhookHandler:
     
     def _send_slack_update(self, response_url: str, message: Dict[str, Any]):
         """Send update to Slack via response_url"""
+        # Skip if no response_url (happens with modal submissions)
+        if not response_url:
+            self.logger.debug("No response_url provided, skipping Slack update")
+            return
+
         try:
             response = requests.post(response_url, json=message, timeout=5)
             if response.status_code != 200:

@@ -56,16 +56,36 @@ class SlackNotifier:
             Slack Block Kit JSON structure
         """
         blocks = []
-        
-        # Header with date
+
+        # Big visual separator - header with date
         blocks.append({
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"🤖 AI Daily Digest - {digest_date.strftime('%B %d, %Y')}"
+                "text": f"━━━━━━━━━━━━━━━━━━━━━━━━━",
+                "emoji": True
             }
         })
-        
+
+        blocks.append({
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"🤖 AI DAILY DIGEST",
+                "emoji": True
+            }
+        })
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*📅 {digest_date.strftime('%A, %B %d, %Y')}*"
+            }
+        })
+
+        blocks.append({"type": "divider"})
+
         # Brief summary section (50 words max)
         # Extract first ~50 words from summary_text
         words = summary_text.split()
