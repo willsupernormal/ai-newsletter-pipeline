@@ -21,6 +21,10 @@ fastapi>=0.104.0  # Webhook server
 uvicorn>=0.24.0  # ASGI server
 pyairtable>=2.3.0  # Airtable API client
 
+# Phase 3: Google Drive integration
+google-auth>=2.23.0
+google-api-python-client>=2.100.0
+
 # Email processing
 imapclient>=3.0.0
 email-validator>=2.1.0
