@@ -81,21 +81,21 @@ class AirtableClient:
     def search_by_url(self, url: str) -> Optional[Dict[str, Any]]:
         """
         Search for article by URL
-        
+
         Args:
             url: Article URL
-            
+
         Returns:
             Record dict if found, None otherwise
         """
         try:
-            formula = match({"Original URL": url})
+            formula = match({"URL": url})  # Updated to match new field name
             records = self.table.all(formula=formula)
-            
+
             if records:
                 return records[0]
             return None
-            
+
         except Exception as e:
             self.logger.error(f"Failed to search Airtable by URL: {e}")
             return None
@@ -124,140 +124,96 @@ class AirtableClient:
     
     def _format_article_fields(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Format article data for Airtable fields
-        
+        Format article data for Airtable fields (NEW LEAN SCHEMA)
+
         Args:
             article_data: Raw article data
-            
+
         Returns:
-            Formatted fields dict
+            Formatted fields dict with 16 fields (no bloat)
         """
         fields = {}
-        
-        # Basic fields
+
+        # === CORE FIELDS (6) ===
+
+        # Title
         if 'title' in article_data:
             fields['Title'] = article_data['title']
-        
+
+        # URL (renamed from "Original URL")
         if 'url' in article_data:
-            fields['Original URL'] = article_data['url']
-        
+            fields['URL'] = article_data['url']
+
+        # Source
         if 'source_name' in article_data:
             fields['Source'] = article_data['source_name']
-        
-        # Stage (default to Saved)
-        fields['Stage'] = article_data.get('stage', '📥 Saved')
-        
-        # Dates
-        if 'digest_date' in article_data:
-            if isinstance(article_data['digest_date'], (date, datetime)):
-                fields['Digest Date'] = article_data['digest_date'].isoformat()
-            else:
-                fields['Digest Date'] = article_data['digest_date']
-        
-        # Theme and Content Type
-        if 'primary_theme' in article_data and article_data['primary_theme']:
-            fields['Theme'] = article_data['primary_theme']
-        
-        if 'content_type' in article_data and article_data['content_type']:
-            fields['Content Type'] = article_data['content_type'].capitalize()
-        
-        # Priority (default to Medium)
-        fields['Priority'] = article_data.get('priority', '🟡 Medium')
-        
-        # User-selected metadata from modal
+
+        # Stage - NEW default is "💡 Ideation"
+        fields['Stage'] = article_data.get('stage', '💡 Ideation')
+
+        # Theme (user-selected overrides AI-detected)
         if 'theme' in article_data and article_data['theme']:
             fields['Theme'] = article_data['theme']
-        
+        elif 'primary_theme' in article_data and article_data['primary_theme']:
+            fields['Theme'] = article_data['primary_theme']
+
+        # Content Type
         if 'content_type' in article_data and article_data['content_type']:
             fields['Content Type'] = article_data['content_type']
-        
+
+        # === WORKFLOW FIELDS (5) ===
+
+        # Your Angle
         if 'your_angle' in article_data and article_data['your_angle']:
             fields['Your Angle'] = article_data['your_angle']
-        
-        # AI-generated analysis (from digest_articles table)
+
+        # Google Doc Link (empty for now - Phase 3)
+        if 'google_doc_link' in article_data and article_data['google_doc_link']:
+            fields['Google Doc Link'] = article_data['google_doc_link']
+
+        # Webflow URL (empty for now - Phase 2)
+        if 'webflow_url' in article_data and article_data['webflow_url']:
+            fields['Webflow URL'] = article_data['webflow_url']
+
+        # Twitter URL (empty for now - Phase 2)
+        if 'twitter_url' in article_data and article_data['twitter_url']:
+            fields['Twitter URL'] = article_data['twitter_url']
+
+        # LinkedIn URL (empty for now - Phase 2)
+        if 'linkedin_url' in article_data and article_data['linkedin_url']:
+            fields['LinkedIn URL'] = article_data['linkedin_url']
+
+        # === METADATA FIELDS (5) ===
+
+        # Date Created - AUTO FIELD (Airtable handles this, no code needed)
+
+        # Scheduled Publish Date (empty for now - Phase 3)
+        if 'scheduled_publish_date' in article_data and article_data['scheduled_publish_date']:
+            fields['Scheduled Publish Date'] = article_data['scheduled_publish_date']
+
+        # Published Date (empty for now - Phase 2)
+        if 'published_date' in article_data and article_data['published_date']:
+            fields['Published Date'] = article_data['published_date']
+
+        # AI Summary - One sentence from detailed_summary for Kanban preview
         if 'detailed_summary' in article_data and article_data['detailed_summary']:
-            fields['Detailed Summary'] = article_data['detailed_summary']
-        
-        if 'business_impact' in article_data and article_data['business_impact']:
-            fields['Business Impact'] = article_data['business_impact']  # Includes strategic context
-        
-        if 'key_quotes' in article_data:
-            fields['Key Quotes'] = self._format_quotes(article_data['key_quotes'])
-        
-        if 'specific_data' in article_data:
-            fields['Specific Data'] = self._format_metrics(article_data['specific_data'])
-        
-        if 'companies_mentioned' in article_data and article_data['companies_mentioned']:
-            fields['Companies Mentioned'] = ', '.join(article_data['companies_mentioned'])
-        
-        # Full article text (from scraping)
-        if 'full_article_text' in article_data:
-            fields['Full Article Text'] = article_data['full_article_text']
-        
-        if 'word_count' in article_data:
-            fields['Word Count'] = article_data['word_count']
-        
-        if 'author' in article_data and article_data['author']:
-            fields['Author'] = article_data['author']
-        
+            summary = article_data['detailed_summary']
+            # Extract first sentence (split on period)
+            first_sentence = summary.split('.')[0] + '.' if '.' in summary else summary
+            # Truncate if too long
+            if len(first_sentence) > 200:
+                first_sentence = summary[:197] + '...'
+            fields['AI Summary'] = first_sentence
+        elif 'ai_summary_short' in article_data and article_data['ai_summary_short']:
+            # Fallback to ai_summary_short if available
+            fields['AI Summary'] = article_data['ai_summary_short']
+
         # Supabase ID for linking
         if 'supabase_id' in article_data:
             fields['Supabase ID'] = article_data['supabase_id']
-        
+
         return fields
-    
-    def _format_metrics(self, metrics: List[Dict[str, Any]]) -> str:
-        """Format metrics list as readable text"""
-        if not metrics:
-            return ""
-        
-        # Handle if metrics is not a list (e.g., None, string, etc.)
-        if not isinstance(metrics, list):
-            return ""
-        
-        formatted = []
-        for i, metric in enumerate(metrics, 1):
-            # Skip if metric is not a dict
-            if not isinstance(metric, dict):
-                continue
-                
-            metric_name = metric.get('metric', 'Metric')
-            value = metric.get('value', 'N/A')
-            context = metric.get('context', '')
-            
-            formatted.append(f"{i}. {metric_name}: {value}")
-            if context:
-                formatted.append(f"   Context: {context}")
-        
-        return "\n".join(formatted)
-    
-    def _format_quotes(self, quotes: List[Dict[str, Any]]) -> str:
-        """Format quotes list as readable text"""
-        if not quotes:
-            return ""
-        
-        # Handle if quotes is not a list (e.g., None, string, etc.)
-        if not isinstance(quotes, list):
-            return ""
-        
-        formatted = []
-        for i, quote in enumerate(quotes, 1):
-            # Skip if quote is not a dict
-            if not isinstance(quote, dict):
-                continue
-                
-            quote_text = quote.get('quote', '')
-            speaker = quote.get('speaker', '')
-            context = quote.get('context', '')
-            
-            formatted.append(f"{i}. \"{quote_text}\"")
-            if speaker:
-                formatted.append(f"   - {speaker}")
-            if context:
-                formatted.append(f"   Context: {context}")
-        
-        return "\n".join(formatted)
-    
+
     def get_recent_articles(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Get recent articles from Airtable

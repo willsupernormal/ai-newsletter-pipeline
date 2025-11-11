@@ -538,19 +538,15 @@ class SlackWebhookHandler:
                 return
 
             # Prepare data for content pipeline
-            today = datetime.now().date().isoformat()
             idea_data = {
                 'title': title,
                 'url': url if url else f"manual-idea-{datetime.now().timestamp()}",  # Unique URL for ideas without links
                 'source_name': 'Manual Entry',
-                'digest_date': today,
-                'stage': '📥 Saved',
-                'priority': '🟡 Medium',
+                'stage': '💡 Ideation',  # Updated to new default stage
                 'theme': theme,
                 'content_type': content_type,
                 'your_angle': angle,
-                'full_article_text': notes,  # User's notes as main content
-                'word_count': len(notes.split()),
+                'detailed_summary': notes,  # Will be converted to AI Summary (first sentence)
             }
 
             # If URL provided, try to scrape it
@@ -561,10 +557,8 @@ class SlackWebhookHandler:
                     scrape_result = await self.scraper.scrape_article(url)
                     if scrape_result and scrape_result.get('full_text'):
                         scraped_content = scrape_result.get('full_text', '')
-                        idea_data['word_count'] += scrape_result.get('word_count', 0)
-                        idea_data['author'] = scrape_result.get('author')
-                        # Append scraped content to notes
-                        idea_data['full_article_text'] = f"{notes}\n\n---\n\n## Reference Article\n\n{scraped_content}"
+                        # Append scraped content to notes for AI Summary field
+                        idea_data['detailed_summary'] = f"{notes}\n\n---\n\n## Reference Article\n\n{scraped_content}"
                 except Exception as scrape_error:
                     self.logger.warning(f"[IDEA] Failed to scrape URL: {scrape_error}")
                     # Continue without scraped content
@@ -852,44 +846,23 @@ class SlackWebhookHandler:
         Returns:
             Formatted data dict for Airtable
         """
-        # Get digest date from article
-        digest_date = article.get('digest_date')
-        if not digest_date:
-            # Fallback to scraped_at or today
-            digest_date = article.get('scraped_at', datetime.now().date().isoformat())
-        
-        # Format data
+        # Format data (NEW LEAN SCHEMA)
         data = {
             'title': article.get('title', 'Untitled'),
             'url': article.get('url', ''),
             'source_name': article.get('source_name', 'Unknown'),
-            'digest_date': digest_date,
-            'stage': '📥 Saved',
-            'priority': '🟡 Medium',
-            
+            'stage': '💡 Ideation',  # Updated to new default stage
+
             # User-selected metadata from modal
             'theme': theme if theme else None,
             'content_type': content_type if content_type else None,
             'your_angle': angle if angle else None,
-            
-            # AI-generated analysis (from digest_articles table)
+
+            # AI Summary field (airtable_client will extract first sentence)
             'detailed_summary': article.get('detailed_summary', ''),
-            'business_impact': article.get('business_impact', ''),
-            'strategic_context': article.get('strategic_context', ''),
-            'key_quotes': article.get('key_quotes', []),
-            'specific_data': article.get('specific_data', []),
-            'talking_points': article.get('talking_points', []),
-            'newsletter_angles': article.get('newsletter_angles', []),
-            'technical_details': article.get('technical_details', []),
-            'companies_mentioned': article.get('companies_mentioned', []),
-            
-            # Scraped content
-            'full_article_text': scrape_result.get('full_text', ''),
-            'word_count': scrape_result.get('word_count', 0),
-            'author': scrape_result.get('author'),
-            
+
             # Metadata
             'supabase_id': article.get('id', '')
         }
-        
+
         return data
