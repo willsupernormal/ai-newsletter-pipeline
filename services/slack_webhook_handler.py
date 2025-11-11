@@ -850,7 +850,7 @@ class SlackWebhookHandler:
         data = {
             'title': article.get('title', 'Untitled'),
             'url': article.get('url', ''),
-            'source_name': article.get('source_name', 'Unknown'),
+            'source_name': 'Daily Digest',  # Workflow source (not RSS feed name)
             'stage': '💡 Ideation',  # Updated to new default stage
 
             # User-selected metadata from modal
