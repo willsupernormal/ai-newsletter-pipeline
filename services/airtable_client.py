@@ -161,11 +161,15 @@ class AirtableClient:
         if 'content_type' in article_data and article_data['content_type']:
             fields['Content Type'] = article_data['content_type']
 
-        # === WORKFLOW FIELDS (5) ===
+        # === WORKFLOW FIELDS (6) ===
 
         # Your Angle
         if 'your_angle' in article_data and article_data['your_angle']:
             fields['Your Angle'] = article_data['your_angle']
+
+        # .md Context doc - Link to markdown file in Google Drive
+        if 'md_context_doc' in article_data and article_data['md_context_doc']:
+            fields['.md Context doc'] = article_data['md_context_doc']
 
         # Google Doc Link (empty for now - Phase 3)
         if 'google_doc_link' in article_data and article_data['google_doc_link']:

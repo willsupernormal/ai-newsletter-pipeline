@@ -92,6 +92,17 @@ class ContentPipelineHandler:
                     result['airtable'] = airtable_result if not isinstance(airtable_result, Exception) else {'success': False, 'error': str(airtable_result)}
                     result['markdown'] = markdown_result if not isinstance(markdown_result, Exception) else {'success': False, 'error': str(markdown_result)}
 
+                    # Link markdown to Airtable record if both succeeded
+                    if result['airtable'].get('success') and result['markdown'].get('success'):
+                        record_id = result['airtable'].get('record_id')
+                        web_view_link = result['markdown'].get('web_view_link')
+
+                        if record_id and web_view_link:
+                            self.airtable.update_article_record(record_id, {
+                                '.md Context doc': web_view_link
+                            })
+                            self.logger.info(f"✓ Linked markdown to Airtable record: {record_id}")
+
                     # Success if at least one succeeded
                     result['success'] = (
                         result['airtable'].get('success', False) or
