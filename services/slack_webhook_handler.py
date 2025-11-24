@@ -361,11 +361,16 @@ class SlackWebhookHandler:
                 # This is a modal submission
                 article_id = payload.get('view', {}).get('private_metadata')
                 values = payload.get('view', {}).get('state', {}).get('values', {})
-                
-                # Extract theme, content type, and angle
-                theme = values.get('theme_block', {}).get('theme_select', {}).get('selected_option', {}).get('value')
-                content_type = values.get('content_type_block', {}).get('content_type_select', {}).get('selected_option', {}).get('value')
-                angle = values.get('angle_block', {}).get('angle_input', {}).get('value')
+
+                # Extract theme, content type, and angle (handle optional fields that may be None)
+                theme_block = values.get('theme_block') or {}
+                theme = theme_block.get('theme_select', {}).get('selected_option', {}).get('value')
+
+                content_type_block = values.get('content_type_block') or {}
+                content_type = content_type_block.get('content_type_select', {}).get('selected_option', {}).get('value')
+
+                angle_block = values.get('angle_block') or {}
+                angle = angle_block.get('angle_input', {}).get('value')
                 
                 # For modal submissions, use the default channel (ai-daily-digest)
                 channel_id = "C09NLCBCMCZ"
@@ -503,20 +508,26 @@ class SlackWebhookHandler:
             if title:
                 title = title.strip()
 
-            notes = values.get('notes_block', {}).get('notes_input', {}).get('value', '')
+            notes_block = values.get('notes_block') or {}
+            notes = notes_block.get('notes_input', {}).get('value', '')
             if notes:
                 notes = notes.strip()
 
-            url = values.get('url_block', {}).get('url_input', {}).get('value')
+            url_block = values.get('url_block') or {}
+            url = url_block.get('url_input', {}).get('value')
             if url:
                 url = url.strip()
             else:
                 url = ''
 
-            theme = values.get('theme_block', {}).get('theme_select', {}).get('selected_option', {}).get('value')
-            content_type = values.get('content_type_block', {}).get('content_type_select', {}).get('selected_option', {}).get('value')
+            theme_block = values.get('theme_block') or {}
+            theme = theme_block.get('theme_select', {}).get('selected_option', {}).get('value')
 
-            angle = values.get('angle_block', {}).get('angle_input', {}).get('value')
+            content_type_block = values.get('content_type_block') or {}
+            content_type = content_type_block.get('content_type_select', {}).get('selected_option', {}).get('value')
+
+            angle_block = values.get('angle_block') or {}
+            angle = angle_block.get('angle_input', {}).get('value')
             if angle:
                 angle = angle.strip()
             else:
