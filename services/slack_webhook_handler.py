@@ -362,21 +362,15 @@ class SlackWebhookHandler:
                 article_id = payload.get('view', {}).get('private_metadata')
                 values = payload.get('view', {}).get('state', {}).get('values', {})
 
-                # DEBUG: Log the full values structure
-                self.logger.info(f"[DEBUG] values keys: {list(values.keys())}")
-                self.logger.info(f"[DEBUG] values content: {json.dumps(values, indent=2)}")
-
-                # Extract theme, content type, and angle (handle optional fields that may be None)
+                # Extract theme, content type, and angle
+                # NOTE: Slack sets selected_option to null (not omit it) when unselected
                 theme_block = values.get('theme_block') or {}
-                self.logger.info(f"[DEBUG] theme_block type: {type(theme_block)}, value: {theme_block}")
-                theme = theme_block.get('theme_select', {}).get('selected_option', {}).get('value')
+                theme = (theme_block.get('theme_select', {}).get('selected_option') or {}).get('value')
 
                 content_type_block = values.get('content_type_block') or {}
-                self.logger.info(f"[DEBUG] content_type_block type: {type(content_type_block)}, value: {content_type_block}")
-                content_type = content_type_block.get('content_type_select', {}).get('selected_option', {}).get('value')
+                content_type = (content_type_block.get('content_type_select', {}).get('selected_option') or {}).get('value')
 
                 angle_block = values.get('angle_block') or {}
-                self.logger.info(f"[DEBUG] angle_block type: {type(angle_block)}, value: {angle_block}")
                 angle = angle_block.get('angle_input', {}).get('value')
                 
                 # For modal submissions, use the default channel (ai-daily-digest)
@@ -528,10 +522,10 @@ class SlackWebhookHandler:
                 url = ''
 
             theme_block = values.get('theme_block') or {}
-            theme = theme_block.get('theme_select', {}).get('selected_option', {}).get('value')
+            theme = (theme_block.get('theme_select', {}).get('selected_option') or {}).get('value')
 
             content_type_block = values.get('content_type_block') or {}
-            content_type = content_type_block.get('content_type_select', {}).get('selected_option', {}).get('value')
+            content_type = (content_type_block.get('content_type_select', {}).get('selected_option') or {}).get('value')
 
             angle_block = values.get('angle_block') or {}
             angle = angle_block.get('angle_input', {}).get('value')
