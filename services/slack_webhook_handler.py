@@ -71,12 +71,19 @@ class SlackWebhookHandler:
             self.logger.error(f"Error verifying Slack signature: {e}")
             return False
     
-    def _open_pipeline_modal(self, trigger_id: str, article_id: str):
+    def _open_pipeline_modal(self, trigger_id: str, article_id: str, message_ts: str = None, channel_id: str = None):
         """Open modal for user to select theme, content type, and angle"""
+        # Store article_id, message_ts, and channel_id as JSON
+        metadata = {
+            "article_id": article_id,
+            "message_ts": message_ts,
+            "channel_id": channel_id
+        }
+
         modal_view = {
             "type": "modal",
             "callback_id": "pipeline_modal",
-            "private_metadata": article_id,  # Store article ID
+            "private_metadata": json.dumps(metadata),  # Store as JSON
             "title": {"type": "plain_text", "text": "Add to Pipeline"},
             "submit": {"type": "plain_text", "text": "Submit"},
             "close": {"type": "plain_text", "text": "Cancel"},
@@ -306,13 +313,18 @@ class SlackWebhookHandler:
                 # Open modal for user to select theme, content type, and angle
                 article_id = payload.get('actions', [{}])[0].get('value')
                 trigger_id = payload.get('trigger_id')
-                
+
+                # Get message info so we can update the button later
+                container = payload.get('container', {})
+                message_ts = container.get('message_ts')
+                channel_id = container.get('channel_id')
+
                 if not trigger_id:
                     return {"text": "❌ Missing trigger_id"}
-                
-                # Open modal
-                self._open_pipeline_modal(trigger_id, article_id)
-                
+
+                # Open modal with message info
+                self._open_pipeline_modal(trigger_id, article_id, message_ts, channel_id)
+
                 # Return empty response (modal will handle the rest)
                 return {}
             
@@ -359,7 +371,19 @@ class SlackWebhookHandler:
             
             if is_modal_submission:
                 # This is a modal submission
-                article_id = payload.get('view', {}).get('private_metadata')
+                # Parse metadata JSON
+                metadata_str = payload.get('view', {}).get('private_metadata', '{}')
+                try:
+                    metadata = json.loads(metadata_str)
+                    article_id = metadata.get('article_id')
+                    message_ts = metadata.get('message_ts')
+                    channel_id = metadata.get('channel_id', 'C09NLCBCMCZ')
+                except json.JSONDecodeError:
+                    # Fallback for old format (plain article_id string)
+                    article_id = metadata_str
+                    message_ts = None
+                    channel_id = 'C09NLCBCMCZ'
+
                 values = payload.get('view', {}).get('state', {}).get('values', {})
 
                 # Extract theme, content type, and angle
@@ -372,9 +396,6 @@ class SlackWebhookHandler:
 
                 angle_block = values.get('angle_block') or {}
                 angle = angle_block.get('angle_input', {}).get('value')
-                
-                # For modal submissions, use the default channel (ai-daily-digest)
-                channel_id = "C09NLCBCMCZ"
             else:
                 # Direct button click (old flow)
                 article_id = payload.get('actions', [{}])[0].get('value')
@@ -384,12 +405,9 @@ class SlackWebhookHandler:
                 is_modal_submission = False
             
             if not article_id:
-                if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
-                    try:
-                        requests.post(self.settings.SLACK_WEBHOOK_URL, json={"text": "❌ No article ID provided"}, timeout=5)
-                    except Exception as we:
-                        self.logger.warning(f"Failed to post error via webhook: {we}")
-                else:
+                self.logger.error("No article ID provided")
+                # For modal submissions, fail silently (just log)
+                if not is_modal_submission:
                     self._send_slack_update(response_url, {"text": "❌ No article ID provided", "replace_original": False})
                 return
 
@@ -406,23 +424,19 @@ class SlackWebhookHandler:
                 self.logger.info(f"[ASYNC] Has why_it_matters: {bool(article.get('why_it_matters'))}")
 
             if not article:
-                if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
-                    try:
-                        requests.post(self.settings.SLACK_WEBHOOK_URL, json={"text": f"❌ Article not found: {article_id}"}, timeout=5)
-                    except Exception as we:
-                        self.logger.warning(f"Failed to post error via webhook: {we}")
-                else:
+                self.logger.error(f"Article not found: {article_id}")
+                # For modal submissions, fail silently (just log)
+                if not is_modal_submission:
                     self._send_slack_update(response_url, {"text": f"❌ Article not found: {article_id}", "replace_original": False})
                 return
 
             # Check if already in Airtable
             existing = self.airtable.search_by_supabase_id(article_id)
             if existing:
-                if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
-                    try:
-                        requests.post(self.settings.SLACK_WEBHOOK_URL, json={"text": f"✅ Already in pipeline: *{article['title']}*"}, timeout=5)
-                    except Exception as we:
-                        self.logger.warning(f"Failed to post via webhook: {we}")
+                if is_modal_submission and message_ts and channel_id:
+                    # Silently update button to show it's already added
+                    self._update_message_button(channel_id, message_ts, "✅ Added")
+                    self.logger.info("Article already in pipeline, updated button")
                 else:
                     self._send_slack_update(response_url, {"text": f"✅ Already in pipeline: *{article['title']}*", "replace_original": False})
                 return
@@ -465,26 +479,10 @@ class SlackWebhookHandler:
                 destination_str = " & ".join(destinations) if destinations else "content pipeline"
 
                 # Send success update
-                if is_modal_submission:
-                    # For modal submissions, post a new message using webhook
-                    success_message = (
-                        f"✅ *Added to {destination_str}!*\n\n*{article['title']}*\n\n"
-                        f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
-                        f"{f'🎯 Theme: {theme}' if theme else ''}\n"
-                        f"{f'📝 Type: {content_type}' if content_type else ''}\n"
-                        f"🔗 <{article['url']}|View Original>\n"
-                        f"📋 Saved to: {destination_str}"
-                    )
-                    if self.settings.SLACK_WEBHOOK_URL:
-                        try:
-                            requests.post(
-                                self.settings.SLACK_WEBHOOK_URL,
-                                json={"text": success_message},
-                                timeout=5
-                            )
-                            self.logger.info("✓ Posted success message via webhook")
-                        except Exception as e:
-                            self.logger.warning(f"Failed to post via webhook: {e}")
+                if is_modal_submission and message_ts and channel_id:
+                    # For modal submissions, silently update the original message button
+                    self._update_message_button(channel_id, message_ts, "✅ Added")
+                    self.logger.info(f"✓ Updated button on message {message_ts}")
                 else:
                     # For button clicks, update the original message
                     self._send_slack_update(response_url, {
@@ -497,18 +495,10 @@ class SlackWebhookHandler:
                     })
             else:
                 error_msg = result.get('error', 'Unknown error')
-                if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
-                    # For modal submissions, post error via webhook
-                    try:
-                        requests.post(
-                            self.settings.SLACK_WEBHOOK_URL,
-                            json={"text": f"❌ Failed to save: {article['title']}\nError: {error_msg}"},
-                            timeout=5
-                        )
-                    except Exception as we:
-                        self.logger.warning(f"Failed to post error via webhook: {we}")
-                else:
-                    # For button clicks, update original message
+                self.logger.error(f"Failed to save article: {error_msg}")
+                # For modal submissions, fail silently (just log)
+                # For button clicks, update original message
+                if not is_modal_submission:
                     self._send_slack_update(response_url, {
                         "text": f"❌ Failed to save: {article['title']}\nError: {error_msg}",
                         "replace_original": False
@@ -516,18 +506,9 @@ class SlackWebhookHandler:
 
         except Exception as e:
             self.logger.error(f"[ASYNC] Error: {e}", exc_info=True)
-            if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
-                # For modal submissions, post error via webhook
-                try:
-                    requests.post(
-                        self.settings.SLACK_WEBHOOK_URL,
-                        json={"text": f"❌ Error adding to pipeline: {str(e)}"},
-                        timeout=5
-                    )
-                except Exception as we:
-                    self.logger.warning(f"Failed to post error via webhook: {we}")
-            else:
-                # For button clicks, update original message
+            # For modal submissions, fail silently (just log)
+            # For button clicks, update original message
+            if not is_modal_submission:
                 self._send_slack_update(response_url, {
                     "text": f"❌ Error adding to pipeline: {str(e)}",
                     "replace_original": False
@@ -711,7 +692,75 @@ class SlackWebhookHandler:
                 self.logger.error(f"Full Slack response: {result}")
         except Exception as e:
             self.logger.error(f"Error posting to channel: {e}")
-    
+
+    def _update_message_button(self, channel: str, message_ts: str, button_text: str):
+        """Update a button on an existing message (silently, no notification)"""
+        try:
+            # First, fetch the original message
+            history_response = requests.post(
+                "https://slack.com/api/conversations.history",
+                headers={
+                    "Authorization": f"Bearer {self.settings.SLACK_BOT_TOKEN}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "channel": channel,
+                    "latest": message_ts,
+                    "limit": 1,
+                    "inclusive": True
+                }
+            )
+            history_result = history_response.json()
+
+            if not history_result.get('ok') or not history_result.get('messages'):
+                self.logger.error(f"Failed to fetch message: {history_result.get('error')}")
+                return
+
+            original_message = history_result['messages'][0]
+            blocks = original_message.get('blocks', [])
+
+            # Find and update the "Add to Pipeline" button
+            updated = False
+            for block in blocks:
+                if block.get('type') == 'actions':
+                    for element in block.get('elements', []):
+                        if element.get('action_id') == 'add_to_pipeline':
+                            element['text']['text'] = button_text
+                            element['style'] = 'primary'
+                            # Remove action_id and value to disable the button
+                            element.pop('action_id', None)
+                            element.pop('value', None)
+                            updated = True
+                            break
+
+            if not updated:
+                self.logger.warning(f"Could not find add_to_pipeline button in message {message_ts}")
+                return
+
+            # Update the message with new blocks
+            update_response = requests.post(
+                "https://slack.com/api/chat.update",
+                headers={
+                    "Authorization": f"Bearer {self.settings.SLACK_BOT_TOKEN}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "channel": channel,
+                    "ts": message_ts,
+                    "blocks": blocks,
+                    "text": original_message.get('text', '')  # Preserve original text
+                }
+            )
+            update_result = update_response.json()
+
+            if not update_result.get('ok'):
+                self.logger.error(f"Failed to update message: {update_result.get('error')}")
+            else:
+                self.logger.info(f"Successfully updated button to '{button_text}'")
+
+        except Exception as e:
+            self.logger.error(f"Error updating message button: {e}", exc_info=True)
+
     def _update_button_to_processing(self, blocks: list, clicked_block_id: str) -> list:
         """
         Update the clicked button to show processing state
