@@ -384,38 +384,47 @@ class SlackWebhookHandler:
                 is_modal_submission = False
             
             if not article_id:
-                self._send_slack_update(response_url, {
-                    "text": "❌ No article ID provided",
-                    "replace_original": False
-                })
+                if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
+                    try:
+                        requests.post(self.settings.SLACK_WEBHOOK_URL, json={"text": "❌ No article ID provided"}, timeout=5)
+                    except Exception as we:
+                        self.logger.warning(f"Failed to post error via webhook: {we}")
+                else:
+                    self._send_slack_update(response_url, {"text": "❌ No article ID provided", "replace_original": False})
                 return
-            
+
             self.logger.info(f"[ASYNC] Processing article: {article_id}")
-            
+
             # Fetch article from Supabase
             article = await self._fetch_article_from_supabase(article_id)
-            
+
             # Log what we got from Supabase
             self.logger.info(f"[ASYNC] Article data keys: {list(article.keys()) if article else 'None'}")
             if article:
                 self.logger.info(f"[ASYNC] Has ai_summary_short: {bool(article.get('ai_summary_short'))}")
                 self.logger.info(f"[ASYNC] Has key_metrics: {bool(article.get('key_metrics'))}")
                 self.logger.info(f"[ASYNC] Has why_it_matters: {bool(article.get('why_it_matters'))}")
-            
+
             if not article:
-                self._send_slack_update(response_url, {
-                    "text": f"❌ Article not found: {article_id}",
-                    "replace_original": False
-                })
+                if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
+                    try:
+                        requests.post(self.settings.SLACK_WEBHOOK_URL, json={"text": f"❌ Article not found: {article_id}"}, timeout=5)
+                    except Exception as we:
+                        self.logger.warning(f"Failed to post error via webhook: {we}")
+                else:
+                    self._send_slack_update(response_url, {"text": f"❌ Article not found: {article_id}", "replace_original": False})
                 return
-            
+
             # Check if already in Airtable
             existing = self.airtable.search_by_supabase_id(article_id)
             if existing:
-                self._send_slack_update(response_url, {
-                    "text": f"✅ Already in pipeline: *{article['title']}*",
-                    "replace_original": False
-                })
+                if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
+                    try:
+                        requests.post(self.settings.SLACK_WEBHOOK_URL, json={"text": f"✅ Already in pipeline: *{article['title']}*"}, timeout=5)
+                    except Exception as we:
+                        self.logger.warning(f"Failed to post via webhook: {we}")
+                else:
+                    self._send_slack_update(response_url, {"text": f"✅ Already in pipeline: *{article['title']}*", "replace_original": False})
                 return
             
             # Scrape full article text (this is the slow part)
@@ -457,16 +466,25 @@ class SlackWebhookHandler:
 
                 # Send success update
                 if is_modal_submission:
-                    # For modal submissions, post a new message to the channel
-                    self._post_to_channel(
+                    # For modal submissions, post a new message using webhook
+                    success_message = (
                         f"✅ *Added to {destination_str}!*\n\n*{article['title']}*\n\n"
                         f"📊 Scraped: {scrape_result.get('word_count', 0):,} words\n"
                         f"{f'🎯 Theme: {theme}' if theme else ''}\n"
                         f"{f'📝 Type: {content_type}' if content_type else ''}\n"
                         f"🔗 <{article['url']}|View Original>\n"
-                        f"📋 Saved to: {destination_str}",
-                        channel=channel_id
+                        f"📋 Saved to: {destination_str}"
                     )
+                    if self.settings.SLACK_WEBHOOK_URL:
+                        try:
+                            requests.post(
+                                self.settings.SLACK_WEBHOOK_URL,
+                                json={"text": success_message},
+                                timeout=5
+                            )
+                            self.logger.info("✓ Posted success message via webhook")
+                        except Exception as e:
+                            self.logger.warning(f"Failed to post via webhook: {e}")
                 else:
                     # For button clicks, update the original message
                     self._send_slack_update(response_url, {
@@ -479,17 +497,41 @@ class SlackWebhookHandler:
                     })
             else:
                 error_msg = result.get('error', 'Unknown error')
-                self._send_slack_update(response_url, {
-                    "text": f"❌ Failed to save: {article['title']}\nError: {error_msg}",
-                    "replace_original": False
-                })
-                
+                if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
+                    # For modal submissions, post error via webhook
+                    try:
+                        requests.post(
+                            self.settings.SLACK_WEBHOOK_URL,
+                            json={"text": f"❌ Failed to save: {article['title']}\nError: {error_msg}"},
+                            timeout=5
+                        )
+                    except Exception as we:
+                        self.logger.warning(f"Failed to post error via webhook: {we}")
+                else:
+                    # For button clicks, update original message
+                    self._send_slack_update(response_url, {
+                        "text": f"❌ Failed to save: {article['title']}\nError: {error_msg}",
+                        "replace_original": False
+                    })
+
         except Exception as e:
             self.logger.error(f"[ASYNC] Error: {e}", exc_info=True)
-            self._send_slack_update(response_url, {
-                "text": f"❌ Error adding to pipeline: {str(e)}",
-                "replace_original": False
-            })
+            if is_modal_submission and self.settings.SLACK_WEBHOOK_URL:
+                # For modal submissions, post error via webhook
+                try:
+                    requests.post(
+                        self.settings.SLACK_WEBHOOK_URL,
+                        json={"text": f"❌ Error adding to pipeline: {str(e)}"},
+                        timeout=5
+                    )
+                except Exception as we:
+                    self.logger.warning(f"Failed to post error via webhook: {we}")
+            else:
+                # For button clicks, update original message
+                self._send_slack_update(response_url, {
+                    "text": f"❌ Error adding to pipeline: {str(e)}",
+                    "replace_original": False
+                })
 
     async def _process_add_idea_async(
         self,
